@@ -1,0 +1,82 @@
+# Comprehensive Agronomic Knowledge Base: AgroSageGPT Reference Manual
+
+## Section 1: Crop Disease Identification & Management
+
+### 1. Early Blight (Alternaria solani)
+- Symptoms: Dark brown to black concentric target-board spots starting on older lower foliage, spreading upwards. Yellow chlorotic halos around lesions.
+- Predisposing Conditions: Warm temperatures (24-29°C) combined with high relative humidity (>80%) or frequent leaf wetness.
+- Field Treatment & Management:
+  1. Cultural Control: Prune lower leaves to enhance canopy airflow. Avoid sprinkler/overhead irrigation; switch to drip or furrow.
+  2. Chemical/Biological Control: Apply copper oxychloride (2.5g/L) or Mancozeb (2g/L). In organic farming, use Trichoderma harzianum or Bacillus subtilis foliar spray.
+  3. Crop Rotation: Rotate with non-solanaceous crops (e.g., legumes or cereals) for 2-3 years.
+
+### 2. Late Blight (Phytophthora infestans)
+- Symptoms: Water-soaked pale lesions expanding rapidly into large dark brown necrotic blotches. White mold/mycelium on leaf underside during damp mornings.
+- Management: Rapid application of systemic fungicides like Metalaxyl + Mancozeb. Destroy severely infected plant residues to stop spore dispersion.
+
+### 3. Cercospora Leaf Spot
+- Symptoms: Small circular or angular spots with gray centers and reddish-brown borders.
+- Management: Foliar spray of Carbendazim or Azoxystrobin. Ensure balanced soil potassium and nitrogen.
+
+### 4. Chlorosis & Micronutrient Deficiencies
+- Nitrogen Deficiency: Uniform general pale yellowing starting on older leaves first, stunted vegetative growth. Remediation: Top-dress with Urea or apply vermicompost tea.
+- Zinc Deficiency: Interveinal chlorosis on young upper leaves, shortened internodes ("rosetting"). Remediation: Foliar zinc sulfate spray (0.5% with 0.25% lime).
+- Iron Chlorosis: Severe whitening of newly emerged leaves while veins remain green (common in alkaline soils with pH > 7.8). Remediation: Cheated Iron (Fe-EDTA) soil or foliar drench.
+
+---
+
+## Section 2: Soil Nutrient (NPK) & Parameter Diagnostics
+
+### 1. Nitrogen (N)
+- Ideal Range: 40 - 70 mg/kg (ppm) for most grain and vegetable crops.
+- Low N (<30 mg/kg): Slow growth, reduced chlorophyll, early leaf senescence. Apply urea, ammonium sulfate, or composted poultry manure.
+- High N (>90 mg/kg): Excessive vegetative sprawl, delayed flowering, susceptibility to sap-sucking pests (aphids, thrips). Suspend nitrogenous fertilizers immediately.
+
+### 2. Phosphorus (P)
+- Ideal Range: 20 - 50 mg/kg (ppm).
+- Deficient P (<15 mg/kg): Purple or purplish-bronze tinting on leaf undersides and stems, poor root architecture and weak seedling anchorage. Apply Single Superphosphate (SSP) or DAP.
+
+### 3. Potassium (K)
+- Ideal Range: 150 - 250 mg/kg (ppm).
+- Deficient K (<120 mg/kg): Marginal leaf scorch, curling of leaf tips, weak stems prone to lodging, increased pest vulnerability. Apply Muriate of Potash (MOP) or wood ash.
+
+### 4. Soil pH Dynamics
+- Optimal Range: 6.0 - 7.2 (Neutral to slightly acidic).
+- Acidic Soils (<5.8): Aluminium and Manganese toxicity; Phosphorus fixation. Remedy: Agricultural lime (calcium carbonate) or dolomite application.
+- Alkaline Soils (>7.8): Micronutrient tie-up (Fe, Zn, Mn). Remedy: Gypsum (calcium sulfate) or elemental sulfur treatment.
+
+### 5. Soil Moisture & Electrical Conductivity (EC)
+- Optimal Moisture: 40% - 65% for loam/clay-loam soils.
+- Saturated (>75%): Root asphyxiation and damping-off fungus risk. Improve drainage trenches.
+- Electrical Conductivity (EC):
+  - Normal/Low Salinity: < 2.0 mS/cm. Safe for all crops.
+  - High Salinity: > 2.5 mS/cm. Induces osmotic drought stress. Flush soil with clean water and improve leaching fractions.
+
+---
+
+## Section 3: Weather-Adaptive Agronomic Decisions
+
+### 1. High Temperature & Heatwaves (>35°C)
+- Shift irrigation to early morning (05:00 - 08:00) or late dusk to curtail evaporative loss.
+- Apply straw or crop residue mulching to drop root zone temperature by 3-5°C.
+
+### 2. High Humidity (>80%) & Overcast Skies
+- Suspend all overhead foliar watering.
+- Heighten vigilance for spore germination (fungal blights, downy mildew).
+- Avoid spraying agrochemicals immediately before forecast rainfall to prevent chemical runoff into groundwater.
+
+### 3. Strong Wind Speed (>5.0 m/s)
+- Avoid foliar spray applications due to droplet drift and uneven pesticide coverage.
+- Secure vulnerable crop staking (tomatoes, vines, bananas).
+
+---
+
+## Section 4: Multilingual Communication Guidelines for Farmers
+
+- Tone: Respectful, practical, empathetic, and encouraging.
+- Format:
+  1. Immediate Action (What to do today)
+  2. Cause & Root Factor (Why this is happening)
+  3. Long-term Prevention (Preventing recurrence next season)
+- Languages Supported: English, Hindi (हिंदी), Kannada (ಕನ್ನಡ), Telugu (తెలుగు), Tamil (தமிழ்), Marathi (मराठी), Bengali (বাংলা), Punjabi (ਪੰਜਾਬੀ), Gujarati (ગુજરાતી).
+- Avoid convoluted jargon; always explain scientific units in plain language (e.g., "Adequate moisture level" instead of purely numerical volumetric water content).

@@ -1,0 +1,381 @@
+"""RAG Engine for AgroSageGPT.
+
+Integrates ChromaDB vector store with agronomic knowledge, conversational context,
+Computer Vision diagnostics, IoT soil telemetry, and live weather conditions.
+Provides multilingual, farmer-friendly advisories using LangChain and generative models.
+"""
+
+import os
+from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class AgroKnowledgeStore:
+    """Manages local ChromaDB vector store for agricultural knowledge retrieval."""
+    
+    def __init__(self, persist_dir: str = "./.chroma_db", doc_path: str = "./data/agri_knowledge.txt"):
+        self.persist_dir = persist_dir
+        self.doc_path = doc_path
+        self.collection = None
+        self._init_store()
+        
+    def _init_store(self):
+        """Initialize ChromaDB collection and ingest knowledge document."""
+        import chromadb
+        from chromadb.config import Settings
+        
+        os.makedirs(self.persist_dir, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=self.persist_dir)
+        
+        # Collection for agricultural knowledge
+        self.collection = self.client.get_or_create_collection(
+            name="agricultural_advisory_kb"
+        )
+        
+        # Check if already populated
+        if self.collection.count() == 0 and os.path.exists(self.doc_path):
+            self._ingest_file(self.doc_path)
+            
+    def _ingest_file(self, file_path: str):
+        """Split document by markdown sections and ingest into ChromaDB."""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            # Chunking by sections or paragraphs
+            sections = [s.strip() for s in content.split("## ") if s.strip()]
+            documents = []
+            metadatas = []
+            ids = []
+            
+            doc_idx = 0
+            for sec in sections:
+                # Sub-split by subsections
+                subsections = [sub.strip() for sub in sec.split("### ") if sub.strip()]
+                for sub in subsections:
+                    lines = sub.split("\n", 1)
+                    title = lines[0].replace("#", "").strip()
+                    body = lines[1].strip() if len(lines) > 1 else lines[0]
+                    
+                    full_text = f"Category: {title}\n{body}"
+                    documents.append(full_text)
+                    metadatas.append({"topic": title})
+                    ids.append(f"agri_doc_{doc_idx}")
+                    doc_idx += 1
+                    
+            if documents:
+                self.collection.add(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+        except Exception as e:
+            print(f"[AgroKnowledgeStore] Ingestion note: {e}")
+
+    def query_knowledge(self, query_text: str, n_results: int = 3) -> List[str]:
+        """Retrieve most relevant agricultural recommendations."""
+        if not self.collection or self.collection.count() == 0:
+            return ["Consult standard agricultural extension office practices."]
+        try:
+            results = self.collection.query(
+                query_texts=[query_text],
+                n_results=min(n_results, self.collection.count())
+            )
+            docs = results.get("documents", [[]])[0]
+            return docs if docs else ["Maintain regular crop sanitation and balanced NPK fertilizer."]
+        except Exception as e:
+            print(f"[AgroKnowledgeStore] Query exception: {e}")
+            return ["Standard balanced fertilization and integrated pest management recommended."]
+
+
+# Singleton knowledge store instance
+_kb_instance = None
+
+def get_knowledge_store() -> AgroKnowledgeStore:
+    global _kb_instance
+    if _kb_instance is None:
+        _kb_instance = AgroKnowledgeStore()
+    return _kb_instance
+
+
+AGRONOMIST_SYSTEM_PROMPT = """You are AgroSageGPT, an expert multilingual Digital Agronomist and crop physician.
+Your mission is to empower farmers with clear, empathetic, practical, and scientifically sound advice.
+
+You must synthesize information from four key dimensions:
+1. Computer Vision Diagnostic (from leaf/crop images)
+2. Real-time IoT Soil Sensor Telemetry (NPK, pH, Moisture, Temp, EC)
+3. Live Local Weather Data (Temperature, Humidity, Wind, Forecast)
+4. Domain Agronomic Knowledge (retrieved research context)
+
+Farmer Language Preference: {language}
+
+Advisory Structure:
+1. 🩺 Immediate Diagnosis & Crop Health: Explain in plain terms what is happening with the crop.
+2. 🌱 Soil & Nutrient Recommendation: Address any NPK deficiency, pH imbalance, or moisture stress.
+3. 🌦️ Weather Precaution & Spray Timing: Explain whether current weather/wind/humidity is safe for spray or requires irrigation adjustments.
+4. 📋 Clear 3-Step Action Plan: Concise, numbered, practical steps for the farmer to execute today.
+
+Tone Guidelines:
+- Farmer-friendly, respectful, actionable, and encouraging.
+- Avoid overly academic jargon; translate values into actionable advice.
+- When answering in Indian languages (Hindi, Kannada, Telugu, Tamil, etc.), use natural, accessible vocabulary.
+"""
+
+
+def _generate_synthetic_multilingual_response(
+    query: str,
+    vision_summary: str,
+    soil_summary: str,
+    weather_summary: str,
+    retrieved_context: str,
+    language: str = "English"
+) -> str:
+    """Provides a high-quality agronomic response when an external LLM key is absent."""
+    lang_lower = language.lower()
+    
+    # Multilingual greeting & headings
+    headings = {
+        "hindi": {
+            "title": "🌾 एग्रोसेजजीपीटी (AgroSageGPT) - डिजिटल कृषि परामर्श",
+            "diag": "🩺 फसल स्वास्थ्य एवं रोग निदान:",
+            "soil": "🌱 मिट्टी एवं पोषण विश्लेषण:",
+            "weather": "🌦️ मौसम आधारित सलाह:",
+            "plan": "📋 आज के लिए 3 मुख्य कदम:"
+        },
+        "kannada": {
+            "title": "🌾 ಆಗ್ರೋಸೇಜ್‌ಜಿಪಿಟಿ (AgroSageGPT) - ಡಿಜಿಟಲ್ ಕೃಷಿ ಸಲಹೆಗಾರ",
+            "diag": "🩺 ಬೆಳೆ ಆರೋಗ್ಯ ಮತ್ತು ರೋಗ ತಪಾಸಣೆ:",
+            "soil": "🌱 ಮಣ್ಣು ಮತ್ತು ಪೋಷಕಾಂಶಗಳ ವಿಶ್ಲೇಷಣೆ:",
+            "weather": "🌦️ ಹವಾಮಾನ ಆಧಾರಿತ ಮುನ್ನೆಚ್ಚರಿಕೆ:",
+            "plan": "📋 ರೈತರಿಗೆ ಇಂದಿನ 3 ಪ್ರಮುಖ ಹಂತಗಳು:"
+        },
+        "telugu": {
+            "title": "🌾 ఆగ్రోసేజ్‌జిపిటి (AgroSageGPT) - డిజిటల్ వ్యవసాయ సలహాదారు",
+            "diag": "🩺 పంట ఆరోగ్యం మరియు వ్యాధి నిర్ధారణ:",
+            "soil": "🌱 నేల మరియు పోషకాల విశ్లేషణ:",
+            "weather": "🌦️ వాతావరణ ఆధారిత సలహా:",
+            "plan": "📋 నేడు రైతు చేయవలసిన 3 ముఖ్యమైన పనులు:"
+        },
+        "tamil": {
+            "title": "🌾 அக்ரோசேஜ்ஜிபிடி (AgroSageGPT) - டிஜிட்டல் வேளாண்மை வழிகாட்டி",
+            "diag": "🩺 பயிர் ஆரோக்கியம் மற்றும் நோய் கண்டறிதல்:",
+            "soil": "🌱 மண் மற்றும் ஊட்டச்சத்து நிலை:",
+            "weather": "🌦️ வானிலை அடிப்படையிலான ஆலோசனை:",
+            "plan": "📋 விவசாயிகளுக்கான 3 முக்கிய நடவடிக்கைகள்:"
+        },
+        "english": {
+            "title": "🌾 AgroSageGPT Unified Agronomist Advisory",
+            "diag": "🩺 Crop Health & Diagnostic Assessment:",
+            "soil": "🌱 Soil Health & Nutrient Telemetry:",
+            "weather": "🌦️ Weather Impact & Agro-Meteorological Advisory:",
+            "plan": "📋 Actionable 3-Step Execution Plan for Today:"
+        }
+    }
+    
+    chosen_h = headings.get(lang_lower, headings["english"])
+    
+    if lang_lower == "hindi":
+        return f"""### {chosen_h['title']}
+**नमस्ते किसान साथी! आपके खेत के आंकड़ों का संपूर्ण विश्लेषण नीचे दिया गया है:**
+
+#### {chosen_h['diag']}
+- {vision_summary.replace(chr(10), ' ')}
+- रोग की रोकथाम के लिए जैविक एवं वैज्ञानिक उपाय तुरंत अपनाएं।
+
+#### {chosen_h['soil']}
+- {soil_summary.replace(chr(10), ' ')}
+- मिट्टी में नमी और संतुलित खाद का विशेष ध्यान रखें ताकि पौधों की जड़ें मजबूत रहें।
+
+#### {chosen_h['weather']}
+- {weather_summary.replace(chr(10), ' ')}
+- तेज हवा या बारिश की संभावना हो तो रासायनिक छिड़काव टालें।
+
+#### {chosen_h['plan']}
+1. **संक्रमित पत्तियों को हटाएं**: रोगग्रस्त पत्तियों को काटकर खेत से दूर नष्ट करें ताकि संक्रमण न फैले।
+2. **जैविक छिड़काव**: ट्राइकोडर्मा या 0.2% कॉपर ऑक्सीक्लोराइड का सुबह या शाम के समय छिड़काव करें।
+3. **सिंचाई प्रबंधन**: मौसम में आर्द्रता के अनुसार ड्रिप सिंचाई का समय तय करें; पौधों के ऊपर पानी डालने से बचें।
+
+*नोट: यह परामर्श आपकी लाइव मिट्टी, मौसम और दृष्टि सेंसर डेटा पर आधारित है।*
+"""
+    elif lang_lower == "kannada":
+        return f"""### {chosen_h['title']}
+**ನಮಸ್ಕಾರ ರೈತ ಬಾಂಧವರೇ! ನಿಮ್ಮ ಬೆಳೆ ಮತ್ತು ಮಣ್ಣಿನ ವಿವರವಾದ ವಿಶ್ಲೇಷಣೆ ಇಲ್ಲಿದೆ:**
+
+#### {chosen_h['diag']}
+- {vision_summary.replace(chr(10), ' ')}
+- ಎಲೆಗಳ ಮೇಲಿನ ರೋಗ ಲಕ್ಷಣಗಳಿಗೆ ತಕ್ಷಣದ ಚಿಕಿತ್ಸೆ ಅಗತ್ಯವಿದೆ.
+
+#### {chosen_h['soil']}
+- {soil_summary.replace(chr(10), ' ')}
+- ಪೋಷಕಾಂಶಗಳ ಸಮತೋಲನ ಕಾಪಾಡಲು ಸಾವಯವ ಗೊಬ್ಬರ ಮತ್ತು ಎನ್‌ಪಿಕೆ ಪ್ರಮಾಣ ನಿಯಂತ್ರಿಸಿ.
+
+#### {chosen_h['weather']}
+- {weather_summary.replace(chr(10), ' ')}
+- ತೇವಾಂಶ ಮತ್ತು ಗಾಳಿಯ ವೇಗವನ್ನು ಗಮನಿಸಿ ಕೀಟನಾಶಕ ಸಿಂಪಡಿಸಿ.
+
+#### {chosen_h['plan']}
+1. **ಹಾನಿಗೊಳಗಾದ ಎಲೆಗಳನ್ನು ತೆಗೆಯಿರಿ**: ರೋಗ ಹರಡದಂತೆ ಸೋಂಕಿತ ಎಲೆಗಳನ್ನು ಕಿತ್ತು ನಾಶಪಡಿಸಿ.
+2. **ಶಿಲೀಂಧ್ರನಾಶಕ ಸಿಂಪಡಣೆ**: ಟ್ರೈಕೋಡರ್ಮಾ ಅಥವಾ ಶಿಫಾರಸು ಮಾಡಿದ ಜೈವಿಕ ಸಿಂಪಡಣೆ ಮಾಡಿ.
+3. **ಹನಿ ನೀರಾವರಿ ಪಾಲನೆ**: ಮಣ್ಣಿನ ತೇವಾಂಶಕ್ಕೆ ಅನುಗುಣವಾಗಿ ನೀರು ಹಾಯಿಸಿ.
+"""
+    elif lang_lower == "telugu":
+        return f"""### {chosen_h['title']}
+**రైతు సోదరులకు నమస్కారం! మీ క్షేత్ర సమాచారం ఆధారంగా సమగ్ర విశ్లేషణ:**
+
+#### {chosen_h['diag']}
+- {vision_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['soil']}
+- {soil_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['weather']}
+- {weather_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['plan']}
+1. **వ్యాధి సోకిన ఆకులను తొలగించండి**: తెగులు వ్యాపించకుండా జాగ్రత్త వహించండి.
+2. **సహజ నివారణ మందుల పిచికారీ**: ట్రైకోడెర్మా లేదా కాపర్ ఆక్సిక్లోరైడ్ పిచికారీ చేయండి.
+3. **నీటి యాజమాన్యం**: తేమ శాతాన్ని బట్టి డ్రిప్ ద్వారా నీటిని అందించండి.
+"""
+    elif lang_lower == "tamil":
+        return f"""### {chosen_h['title']}
+**வணக்கம் விவசாய பெருமக்களே! உங்கள் பயிர் நிலவரத்தின் ஒருங்கிணைந்த வழிகாட்டுதல்:**
+
+#### {chosen_h['diag']}
+- {vision_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['soil']}
+- {soil_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['weather']}
+- {weather_summary.replace(chr(10), ' ')}
+
+#### {chosen_h['plan']}
+1. **பாதிக்கப்பட்ட இலைகளை அகற்றுங்கள்**: நோய் மற்ற பயிர்களுக்கு பரவாமல் தடுக்கவும்.
+2. **இயற்கை அல்லது பரிந்துரைக்கப்பட்ட பூஞ்சாணக்கொல்லி**: மாலை வேளையில் தெளிக்கவும்.
+3. **சமச்சீர் பாசனம்**: மண்ணின் ஈரப்பதத்திற்கு ஏற்ப சொட்டு நீர் பாசனம் செய்யவும்.
+"""
+    else:
+        # Default English
+        return f"""### {chosen_h['title']}
+**Hello Farmer! Here is your tailored cross-domain agronomic prescription:**
+
+#### {chosen_h['diag']}
+{vision_summary}
+
+#### {chosen_h['soil']}
+{soil_summary}
+
+#### {chosen_h['weather']}
+{weather_summary}
+
+#### 📚 Agronomic Context from Knowledge Base:
+*{retrieved_context[:250]}...*
+
+#### {chosen_h['plan']}
+1. **Canopy Sanitization & Pruning**: Remove visibly spotted or chlorotic foliage to arrest spore dispersion and improve internal air circulation.
+2. **Nutrient & Soil Balancing**: Align nitrogen and phosphorus application with your soil sensor test; ensure pH remains buffered between 6.0 and 7.0 for optimal micronutrient uptake.
+3. **Precision Spray Timing**: Conduct any required biological (Trichoderma harzianum) or preventative copper spray in the calm early morning or late afternoon to prevent evaporative drift and scorch.
+
+*Telemetry Sources: Live IoT telemetry stream, Ultralytics YOLOv8 crop vision, local weather station, and AgroSage Knowledge Base.*
+"""
+
+
+def ask_agronomist(
+    query: str,
+    vision_summary: str = "No crop image uploaded yet. Routine field check.",
+    soil_summary: str = "Soil parameters within normal ranges.",
+    weather_summary: str = "Weather conditions moderate.",
+    language: str = "English",
+    chat_history: Optional[List[Dict[str, str]]] = None
+) -> Dict[str, Any]:
+    """Execute RAG pipeline combining Vision, IoT, Weather, and Vector DB.
+    
+    Args:
+        query: User farmer query / question.
+        vision_summary: Output summary from Vision module.
+        soil_summary: Formatted string from Soil IoT module.
+        weather_summary: Formatted string from Weather API module.
+        language: User-selected target language.
+        chat_history: Previous turn messages.
+        
+    Returns:
+        dict: response text, retrieved context documents, and metadata.
+    """
+    kb = get_knowledge_store()
+    
+    # Retrieve relevant knowledge chunks based on query and detected symptoms
+    search_query = f"{query} {vision_summary[:80]}"
+    retrieved_docs = kb.query_knowledge(search_query, n_results=2)
+    context_str = "\n\n".join(retrieved_docs)
+    
+    llm_api_key = os.getenv("LLM_API_KEY", "").strip()
+    
+    # If a valid external API key is provided, attempt live LLM call
+    if llm_api_key and llm_api_key != "your_llm_api_key_here":
+        try:
+            # Check OpenAI or Google key format
+            if llm_api_key.startswith("AIza"):
+                import google.generativeai as genai
+                genai.configure(api_key=llm_api_key)
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                
+                full_prompt = (
+                    f"{AGRONOMIST_SYSTEM_PROMPT.format(language=language)}\n\n"
+                    f"Agronomic Knowledge Context:\n{context_str}\n\n"
+                    f"Vision Diagnostic:\n{vision_summary}\n\n"
+                    f"Soil Telemetry:\n{soil_summary}\n\n"
+                    f"Weather Telemetry:\n{weather_summary}\n\n"
+                    f"Farmer's Question: {query}\n"
+                    f"Please provide your response in {language}."
+                )
+                res = model.generate_content(full_prompt)
+                return {
+                    "answer": res.text,
+                    "retrieved_context": retrieved_docs,
+                    "engine": "Google Gemini (Live API)"
+                }
+            else:
+                from openai import OpenAI
+                client = OpenAI(api_key=llm_api_key)
+                system_content = AGRONOMIST_SYSTEM_PROMPT.format(language=language)
+                user_content = (
+                    f"Agronomic Reference Documents:\n{context_str}\n\n"
+                    f"{vision_summary}\n\n"
+                    f"{soil_summary}\n\n"
+                    f"{weather_summary}\n\n"
+                    f"Farmer Query: {query}\n"
+                    f"Please respond thoroughly in {language}."
+                )
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": user_content}
+                    ],
+                    temperature=0.3
+                )
+                return {
+                    "answer": response.choices[0].message.content,
+                    "retrieved_context": retrieved_docs,
+                    "engine": "OpenAI GPT (Live API)"
+                }
+        except Exception as e:
+            print(f"[RAGEngine] Live LLM error, falling back to local synthesizer: {e}")
+
+    # Fallback to local contextual Agronomist Synthesizer
+    answer = _generate_synthetic_multilingual_response(
+        query=query,
+        vision_summary=vision_summary,
+        soil_summary=soil_summary,
+        weather_summary=weather_summary,
+        retrieved_context=context_str,
+        language=language
+    )
+    
+    return {
+        "answer": answer,
+        "retrieved_context": retrieved_docs,
+        "engine": "AgroSage Unified Agronomist Engine (Self-Contained Fallback & RAG)"
+    }
