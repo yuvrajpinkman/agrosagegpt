@@ -64,6 +64,31 @@ st.markdown("""
         color: #4a6b4a;
     }
     
+    /* Scrollable chat body with bottom clearance */
+    .stMainBlockContainer {
+        padding-bottom: 150px !important;
+    }
+    
+    /* Modern Floating Action Dock at downside */
+    div[data-testid="stBottom"] {
+        background-color: transparent !important;
+        padding-bottom: 10px !important;
+    }
+    div[data-testid="stBottom"] > div {
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(12px);
+        border: 1px solid #dce8dc;
+        border-radius: 20px;
+        padding: 8px 14px;
+        box-shadow: 0 4px 20px rgba(0, 40, 0, 0.08);
+        max-width: 840px;
+        margin: 0 auto;
+    }
+    div[data-testid="stBottom"] button {
+        border-radius: 16px !important;
+        font-size: 0.85rem !important;
+    }
+    
     /* Telemetry Ribbon Card */
     .telemetry-ribbon {
         background: #ffffff;
@@ -72,17 +97,6 @@ st.markdown("""
         padding: 10px 14px;
         margin-bottom: 1.2rem;
         box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    }
-    
-    /* Modern Action Dock at downside */
-    .action-dock {
-        background: #ffffff;
-        border: 1px solid #dce6dc;
-        border-radius: 12px;
-        padding: 10px 14px;
-        margin-top: 10px;
-        margin-bottom: 12px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
     }
     
     /* Status tags & badges */
@@ -132,6 +146,12 @@ if "mic_key_idx" not in st.session_state:
 
 if "uploaded_doc_names" not in st.session_state:
     st.session_state.uploaded_doc_names = []
+
+if "staged_image" not in st.session_state:
+    st.session_state.staged_image = None
+
+if "staged_image_name" not in st.session_state:
+    st.session_state.staged_image_name = None
 
 # Sidebar for Preferences & Settings
 with st.sidebar:
@@ -224,135 +244,162 @@ with chat_container:
             if msg.get("engine"):
                 st.markdown(f"<span class='engine-tag'>⚡ Powered by: {msg['engine']}</span>", unsafe_allow_html=True)
 
-# ----------------- DOWNSIDE ATTACHMENT & ACTION DOCK -----------------
-st.markdown("---")
+# ----------------- FLOATING BOTTOM ACTION PILL & INPUT DOCK -----------------
+trigger_diagnose_now = False
+voice_text_query = None
+quick_chip_query = None
 
-dock_tab1, dock_tab2, dock_tab3 = st.tabs([
-    "📎 Attach Image (Leaf / Crop Diagnosis)",
-    "🎙️ Voice Microphone (Speak in your language)",
-    "📄 Upload Custom Knowledge (PDF / TXT Manuals)"
-])
-
-# Dock Tab 1: Image Attachment
-staged_image = None
-with dock_tab1:
-    img_col1, img_col2 = st.columns([2, 1])
-    with img_col1:
-        uploaded_img = st.file_uploader("Upload leaf / plant image for disease detection", type=["jpg", "jpeg", "png"], key="dock_img_uploader")
-    with img_col2:
-        st.write("Or quick samples:")
-        sample_btns = st.columns(2)
-        use_diseased = sample_btns[0].button("🍃 Diseased Leaf", use_container_width=True)
-        use_healthy = sample_btns[1].button("🌿 Healthy Leaf", use_container_width=True)
-        
-    if uploaded_img is not None:
-        staged_image = Image.open(uploaded_img)
-    elif use_diseased and os.path.exists("sample_data/sample_diseased_leaf.jpg"):
-        staged_image = Image.open("sample_data/sample_diseased_leaf.jpg")
-    elif use_healthy and os.path.exists("sample_data/sample_healthy_leaf.jpg"):
-        staged_image = Image.open("sample_data/sample_healthy_leaf.jpg")
-        
-    if staged_image is not None:
-        st.image(staged_image, caption="Ready to analyze with question", width=180)
-        st.caption("✅ Image attached. Type your question below or click 'Analyze Image Now'.")
-        if st.button("🔍 Analyze Image & Diagnose Plant Health", type="primary"):
-            with st.spinner("Diagnosing foliage with Hugging Face Meta DINOv2 & Gemini Validator..."):
-                v_res = analyze_crop_image(staged_image, crop_type=crop_type)
-                diag = v_res["disease_diagnosis"]
-                st.session_state.active_vision_summary = v_res["summary"]
-                
-                # Formulate assistant diagnostic response with validation telemetry
-                val_telemetry = ""
-                if "hf_prediction" in diag:
-                    val_telemetry += f"- **🤖 Local Model (HF DINOv2):** `{diag['hf_prediction']}`\n"
-                if "validator_verdict" in diag and diag["validator_verdict"]:
-                    val_telemetry += f"- **🛡️ Gemini Multimodal Validator:** `{diag['validator_verdict']}` — *{diag.get('validation_notes', '')}*\n"
-                
-                diag_msg = (
-                    f"### 🩺 Plant Pathology Assessment: **{diag['condition']}**\n\n"
-                    f"{val_telemetry}"
-                    f"- **Severity:** `{diag['severity']}` (Confidence: {diag['confidence']*100:.1f}%)\n"
-                    f"- **Observed Symptoms:** {diag['symptoms']}\n"
-                    f"- **Recommended Field Action:** {diag['recommendation']}\n\n"
-                    f"*Engine Pipeline: {diag.get('source', 'Vision Engine')}*"
-                )
-                
-                audio_bytes = None
-                if enable_tts:
-                    audio_bytes, _ = synthesize_speech(f"{diag['condition']}. {diag['recommendation']}", language=st.session_state.current_language)
-                    
-                st.session_state.chat_history.append({
-                    "role": "user",
-                    "content": f"Please diagnose this {crop_type} crop foliage photo.",
-                    "attached_image": staged_image,
-                    "audio_bytes": None,
-                    "engine": None
-                })
-                st.session_state.chat_history.append({
-                    "role": "assistant",
-                    "content": diag_msg,
-                    "attached_image": v_res.get("annotated_image"),
-                    "audio_bytes": audio_bytes,
-                    "engine": diag.get("source", "Gemini Vision")
-                })
+with st.bottom():
+    # 1. Staged Leaf Image Banner (if user selected/uploaded an image)
+    if st.session_state.staged_image is not None:
+        with st.container():
+            st_col1, st_col2, st_col3 = st.columns([1, 4, 2])
+            st_col1.image(st.session_state.staged_image, width=50)
+            st_col2.caption(f"🍃 **{st.session_state.staged_image_name or 'Leaf Photo Attached'}** (Ready to analyze with your question)")
+            if st_col3.button("❌ Remove", key="clear_staged_leaf", use_container_width=True):
+                st.session_state.staged_image = None
+                st.session_state.staged_image_name = None
                 st.rerun()
 
-# Dock Tab 2: Voice Input (Microphone with Re-record)
-voice_text_query = None
-with dock_tab2:
-    v_head1, v_head2 = st.columns([3, 1])
-    with v_head1:
-        st.markdown(f"**Speak your question (Auto-Adapts to language • Currently: `{st.session_state.current_language}`)**")
-    with v_head2:
-        if st.button("🔄 Record Again", use_container_width=True, help="Clear microphone and record a fresh question"):
-            st.session_state.mic_key_idx += 1
-            st.rerun()
+    # 2. Sleek Floating Tool Strip: Compact popovers in a single horizontal pill bar
+    tool_col1, tool_col2, tool_col3, tool_col4 = st.columns(4)
+
+    # Tool 1: Leaf Photo Popover
+    with tool_col1:
+        with st.popover("📷 Leaf Photo", use_container_width=True, help="Upload foliage photo for dual-tier disease diagnosis"):
+            st.markdown("##### 🍃 Upload Foliage Photo")
+            st.caption("Local Meta DINOv2 ViT + Gemini Multimodal Validator")
+            up_img = st.file_uploader("Choose leaf image", type=["jpg", "jpeg", "png"], key="dock_leaf_up")
+            if up_img is not None:
+                st.session_state.staged_image = Image.open(up_img)
+                st.session_state.staged_image_name = up_img.name
+                st.success(f"Attached `{up_img.name}`!")
+
+            st.write("Or quick field samples:")
+            s_c1, s_c2 = st.columns(2)
+            if s_c1.button("🍃 Diseased Leaf", use_container_width=True):
+                if os.path.exists("sample_data/sample_diseased_leaf.jpg"):
+                    st.session_state.staged_image = Image.open("sample_data/sample_diseased_leaf.jpg")
+                    st.session_state.staged_image_name = "sample_diseased_leaf.jpg"
+                    st.rerun()
+            if s_c2.button("🌿 Healthy Leaf", use_container_width=True):
+                if os.path.exists("sample_data/sample_healthy_leaf.jpg"):
+                    st.session_state.staged_image = Image.open("sample_data/sample_healthy_leaf.jpg")
+                    st.session_state.staged_image_name = "sample_healthy_leaf.jpg"
+                    st.rerun()
+
+            if st.session_state.staged_image is not None:
+                st.image(st.session_state.staged_image, width=160, caption="Staged Foliage")
+                if st.button("🔍 Diagnose Plant Health Now", type="primary", use_container_width=True):
+                    trigger_diagnose_now = True
+
+    # Tool 2: Voice Microphone Popover
+    with tool_col2:
+        with st.popover("🎙️ Voice Mic", use_container_width=True, help="Speak your question in English, Hindi, Kannada, Telugu, Tamil"):
+            v_h1, v_h2 = st.columns([3, 1])
+            with v_h1:
+                st.markdown(f"##### 🎙️ Voice Query ({st.session_state.current_language})")
+            with v_h2:
+                if st.button("🔄", help="Clear & record again"):
+                    st.session_state.mic_key_idx += 1
+                    st.rerun()
+            st.caption("Noise-gated field audio with Gemini Flash & Whisper ASR")
+            mic_audio = st.audio_input(
+                "Record voice question",
+                key=f"float_dock_mic_{st.session_state.mic_key_idx}"
+            )
+            if mic_audio is not None:
+                with st.spinner("Transcribing speech & adapting language..."):
+                    t_text, _ = transcribe_audio(mic_audio, language="Auto")
+                    if t_text and len(t_text.strip()) > 3:
+                        voice_text_query = t_text
+                        if language_mode == "Auto-Detect (Adaptive)":
+                            st.session_state.current_language = detect_language(voice_text_query, fallback=st.session_state.current_language)
+                        st.info(f"🗣️ **Voice Recognized ({st.session_state.current_language}):** *\"{voice_text_query}\"*")
+                        if st.button("🚀 Ask Recognized Question", type="primary", use_container_width=True):
+                            pass
+
+    # Tool 3: Dynamic PDF / Manual Ingestion Popover
+    with tool_col3:
+        with st.popover("📄 Add Guide", use_container_width=True, help="Upload agricultural bulletins or seed manuals into ChromaDB"):
+            st.markdown("##### 📄 Ingest Agricultural Guides")
+            st.caption("Uploaded documents are indexed into ChromaDB vector memory in real-time.")
+            up_doc = st.file_uploader("Upload .pdf, .txt, .md", type=["pdf", "txt", "md"], key="float_doc_up")
+            if up_doc is not None and up_doc.name not in st.session_state.uploaded_doc_names:
+                with st.spinner(f"Indexing `{up_doc.name}` into ChromaDB..."):
+                    doc_bytes = up_doc.read()
+                    kb = get_knowledge_store()
+                    num_chunks = kb.ingest_user_document(doc_bytes, up_doc.name)
+                    st.session_state.uploaded_doc_names.append(up_doc.name)
+                    st.toast(f"✅ Indexed {num_chunks} chunks from `{up_doc.name}`!", icon="📚")
+            if st.session_state.uploaded_doc_names:
+                st.caption("Currently active manuals:")
+                for d in st.session_state.uploaded_doc_names:
+                    st.caption(f"• 📄 `{d}`")
+
+    # Tool 4: Quick Suggestion Prompts Popover
+    with tool_col4:
+        with st.popover("💡 Prompts", use_container_width=True, help="Fast agricultural starter questions"):
+            st.markdown("##### 💡 Instant Agricultural Queries")
+            if st.button("🌾 When & how to cultivate Rice / Paddy?", use_container_width=True):
+                quick_chip_query = "When and how to cultivate Rice (Paddy)? Please provide a complete guide from nursery preparation to harvest."
+            if st.button("🌱 Does my soil need fertilizer?", use_container_width=True):
+                quick_chip_query = "Based on my live soil NPK, pH, and moisture levels, what fertilizers should I apply?"
+            if st.button("🌦️ Is the weather safe for pesticide spray?", use_container_width=True):
+                quick_chip_query = "Considering current temperature, humidity, and wind conditions, is it safe to spray pesticides today?"
+
+    # 3. Main Chat Input Box (floating alongside tool icons)
+    user_text_input = st.chat_input("Ask anything about your crops, soil, weather, or attach foliage/docs...")
+
+# ----------------- EXECUTION CONTROLLER -----------------
+
+# Case A: User triggered direct foliage diagnosis button in Leaf Popover
+if trigger_diagnose_now and st.session_state.staged_image is not None:
+    staged_img = st.session_state.staged_image
+    st.session_state.staged_image = None
+    st.session_state.staged_image_name = None
+    
+    with st.spinner("Diagnosing foliage with Hugging Face Meta DINOv2 & Gemini Validator..."):
+        v_res = analyze_crop_image(staged_img, crop_type=crop_type)
+        diag = v_res["disease_diagnosis"]
+        st.session_state.active_vision_summary = v_res["summary"]
+        
+        val_telemetry = ""
+        if "hf_prediction" in diag:
+            val_telemetry += f"- **🤖 Local Model (HF DINOv2):** `{diag['hf_prediction']}`\n"
+        if "validator_verdict" in diag and diag["validator_verdict"]:
+            val_telemetry += f"- **🛡️ Gemini Multimodal Validator:** `{diag['validator_verdict']}` — *{diag.get('validation_notes', '')}*\n"
+        
+        diag_msg = (
+            f"### 🩺 Plant Pathology Assessment: **{diag['condition']}**\n\n"
+            f"{val_telemetry}"
+            f"- **Severity:** `{diag['severity']}` (Confidence: {diag['confidence']*100:.1f}%)\n"
+            f"- **Observed Symptoms:** {diag['symptoms']}\n"
+            f"- **Recommended Field Action:** {diag['recommendation']}\n\n"
+            f"*Engine Pipeline: {diag.get('source', 'Vision Engine')}*"
+        )
+        
+        audio_bytes = None
+        if enable_tts:
+            audio_bytes, _ = synthesize_speech(f"{diag['condition']}. {diag['recommendation']}", language=st.session_state.current_language)
             
-    mic_audio = st.audio_input(
-        "🎙️ Click to speak (English, Hindi, Kannada, Telugu, Tamil...)",
-        key=f"bottom_dock_mic_{st.session_state.mic_key_idx}"
-    )
-    if mic_audio is not None:
-        with st.spinner("Transcribing voice and adapting language..."):
-            t_text, t_engine = transcribe_audio(mic_audio, language="Auto")
-            if t_text and len(t_text.strip()) > 3:
-                voice_text_query = t_text
-                if language_mode == "Auto-Detect (Adaptive)":
-                    st.session_state.current_language = detect_language(voice_text_query, fallback=st.session_state.current_language)
-                st.info(f"🗣️ **Voice Recognized ({st.session_state.current_language}):** *\"{voice_text_query}\"*")
-                if st.button("🚀 Ask Recognized Question", type="primary"):
-                    # Will trigger execution below
-                    pass
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": f"Please diagnose this {crop_type} crop foliage photo.",
+            "attached_image": staged_img,
+            "audio_bytes": None,
+            "engine": None
+        })
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": diag_msg,
+            "attached_image": v_res.get("annotated_image"),
+            "audio_bytes": audio_bytes,
+            "engine": diag.get("source", "Gemini Vision")
+        })
+        st.rerun()
 
-# Dock Tab 3: Dynamic Knowledge Document Ingestion (PDF / TXT / MD)
-with dock_tab3:
-    st.markdown("**Upload Your Custom Agricultural Manuals, University Bulletins, or Seed Guides**")
-    st.caption("Documents uploaded here are dynamically parsed and indexed into ChromaDB vector store on the fly.")
-    uploaded_doc = st.file_uploader("Upload agricultural file (.pdf, .txt, .md)", type=["pdf", "txt", "md"], key="dynamic_rag_uploader")
-    if uploaded_doc is not None:
-        if uploaded_doc.name not in st.session_state.uploaded_doc_names:
-            with st.spinner(f"Extracting and indexing `{uploaded_doc.name}` into ChromaDB..."):
-                doc_bytes = uploaded_doc.read()
-                kb = get_knowledge_store()
-                num_chunks = kb.ingest_user_document(doc_bytes, uploaded_doc.name)
-                st.session_state.uploaded_doc_names.append(uploaded_doc.name)
-                st.success(f"✅ Successfully ingested **{num_chunks} knowledge chunks** from `{uploaded_doc.name}` into active RAG memory!")
-                st.caption("You can now ask questions directly about this document!")
-
-# Quick suggestion chips
-chip1, chip2, chip3 = st.columns(3)
-quick_chip_query = None
-if chip1.button("🌾 When & how to cultivate Rice / Paddy?", use_container_width=True):
-    quick_chip_query = "When and how to cultivate Rice (Paddy)? Please provide a complete guide from nursery preparation to harvest."
-if chip2.button("🌱 Does my soil need fertilizer?", use_container_width=True):
-    quick_chip_query = "Based on my live soil NPK, pH, and moisture levels, what fertilizers should I apply?"
-if chip3.button("🌦️ Is the weather safe for pesticide spraying?", use_container_width=True):
-    quick_chip_query = "Considering current temperature, humidity, and wind conditions, is it safe to spray pesticides today?"
-
-# Main Chat Input Box at Bottom
-user_text_input = st.chat_input("Type your farming question here (in English, Hindi, or any language)...")
-
-# Resolve Query Priority: Typed Text > Voice Query > Quick Suggestion Chips
+# Case B: Standard Query Resolution (Typed Text > Voice Query > Quick Suggestion Chips)
 final_query = user_text_input or voice_text_query or quick_chip_query
 
 if final_query:
@@ -373,11 +420,23 @@ if final_query:
             st.session_state.current_language = active_language
             lang_label = active_language
 
-        # Append User Message
+        # If a leaf image was attached, analyze it to enrich context
+        attached_img = None
+        if st.session_state.staged_image is not None:
+            attached_img = st.session_state.staged_image
+            st.session_state.staged_image = None
+            st.session_state.staged_image_name = None
+            try:
+                v_res = analyze_crop_image(attached_img, crop_type=crop_type)
+                st.session_state.active_vision_summary = v_res["summary"]
+            except Exception as e:
+                print(f"[VisionApp] Image analysis inline warning: {e}")
+
+        # Append User Message to Chat History
         st.session_state.chat_history.append({
             "role": "user",
             "content": final_query,
-            "attached_image": staged_image,
+            "attached_image": attached_img,
             "audio_bytes": None,
             "engine": None
         })
