@@ -68,13 +68,6 @@ st.markdown("""
         margin-top: 6px;
         margin-right: 6px;
     }
-    .voice-box {
-        background-color: #f9fbe7;
-        border: 1px dashed #8bc34a;
-        padding: 12px;
-        border-radius: 10px;
-        margin-bottom: 15px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -83,7 +76,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         {
             "role": "assistant",
-            "content": "Namaste! I am **AgroSageGPT**, your Digital Agronomist. You can speak to me using your microphone or type in your language. Upload a crop photo, inspect your live soil/weather telemetry, or ask me any question about crop health, fertilizer dosing, and pest management.",
+            "content": "Namaste! I am **AgroSageGPT**, your Digital Agronomist. You can ask me any farming question by typing or speaking in Hindi, Kannada, Telugu, Tamil, or English. You can also upload crop photos for leaf disease diagnostics.",
             "engine": "AgroSage Welcome Agent",
             "audio_bytes": None
         }
@@ -104,9 +97,6 @@ if "vision_result" not in st.session_state:
 if "vision_audio" not in st.session_state:
     st.session_state.vision_audio = None
 
-if "last_transcription" not in st.session_state:
-    st.session_state.last_transcription = None
-
 # Sidebar Configuration
 with st.sidebar:
     st.markdown("### 🌾 AgroSage Settings")
@@ -114,12 +104,12 @@ with st.sidebar:
     language = st.selectbox(
         "🌐 Language / भाषा / ಭಾಷೆ / భాష / மொழி:",
         ["English", "Hindi", "Kannada", "Telugu", "Tamil"],
-        index=0
+        index=1  # Default to Hindi for Indian agronomist experience
     )
     
     crop_type = st.selectbox(
         "🌱 Primary Crop:",
-        ["Tomato", "Rice / Paddy", "Maize / Corn", "Cotton", "Wheat", "Chili", "Potato"],
+        ["Rice / Paddy (धान)", "Wheat (गेहूं)", "Tomato (टमाटर)", "Maize / Corn (मक्का)", "Cotton (कपास)", "Chili (मिर्च)", "Potato (आलू)"],
         index=0
     )
     
@@ -135,7 +125,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 🎙️ Voice & Audio Settings")
-    enable_tts = st.toggle("🔊 Read Answers Aloud (TTS)", value=True, help="Automatically speaks agricultural advice in the chosen language.")
+    enable_tts = st.toggle("🔊 Read Answers Aloud (Neural TTS)", value=True, help="Automatically plays crystal-clear spoken advice in your language.")
 
     st.markdown("---")
     st.markdown("### ⚙️ Production Telemetry & APIs")
@@ -155,12 +145,12 @@ with st.sidebar:
         st.warning("🟡 Gemini (Offline)")
 
     if groq_key and groq_key != "your_groq_api_key_here":
-        st.success("🟢 Groq Whisper-v3 (Speech-to-Text)")
-        st.success("🟢 Groq LLM (High-Speed Fallback)")
+        st.success("🟢 Groq Whisper-v3 (Voice STT)")
+        st.success("🟢 Groq Qwen-27B (LPU Fast Fallback)")
     else:
         st.warning("🟡 Groq (Offline)")
 
-    st.success("🟢 Multilingual Neural TTS Engine Online")
+    st.success("🟢 High-Definition Neural Voice TTS Online")
     st.success("🟢 Ultralytics YOLOv8 Loaded")
     st.success("🟢 ChromaDB Vector Store Active")
     st.success("🟢 7-in-1 IoT Soil Telemetry Online")
@@ -171,12 +161,11 @@ with st.sidebar:
             {"role": "assistant", "content": "Chat history cleared. How can I assist you with your farm today?", "engine": "AgroSage Reset", "audio_bytes": None}
         ]
         st.session_state.vision_audio = None
-        st.session_state.last_transcription = None
         st.rerun()
 
 # Header
 st.markdown('<div class="main-header">🌱 AgroSageGPT: Multilingual Digital Agronomist</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Production AI Platform with Gemini Multimodal Vision, IoT Soil Telemetry, Whisper Voice STT, ChromaDB RAG & Audio TTS</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Production AI Platform with Gemini Multimodal Vision, IoT Soil Telemetry, Whisper Voice STT, ChromaDB RAG & Neural Voice TTS</div>', unsafe_allow_html=True)
 
 # Tabs
 tab_vision, tab_weather, tab_soil, tab_chat = st.tabs([
@@ -216,7 +205,6 @@ with tab_vision:
                     res = analyze_crop_image(target_img, crop_type=crop_type)
                     st.session_state.vision_result = res
                     
-                    # Generate TTS audio for the vision recommendation
                     if enable_tts:
                         diag_text = f"Diagnosis for {crop_type}: {res['disease_diagnosis']['condition']}. {res['disease_diagnosis']['recommendation']}"
                         audio_data, _ = synthesize_speech(diag_text, language=language)
@@ -240,7 +228,6 @@ with tab_vision:
             st.info(f"**Symptoms:** {diag['symptoms']}")
             st.warning(f"**Recommended Field Action:** {diag['recommendation']}")
             
-            # Audio playback for diagnosis
             if st.session_state.vision_audio is not None:
                 st.markdown("🔊 **Spoken Voice Advisory:**")
                 st.audio(st.session_state.vision_audio, format="audio/mp3")
@@ -322,7 +309,7 @@ with tab_chat:
             st.code(st.session_state.weather_summary, language="text")
 
     # Render Chat History
-    for msg in st.session_state.chat_history:
+    for idx, msg in enumerate(st.session_state.chat_history):
         avatar = "🌾" if msg["role"] == "assistant" else "👨‍🌾"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
@@ -333,89 +320,97 @@ with tab_chat:
 
     # 🎙️ VOICE INPUT SECTION (Speech-to-Text)
     st.markdown("---")
-    st.markdown("#### 🎙️ Voice Query (Speak in your regional language)")
+    st.markdown(f"#### 🎙️ Speak your question in {language}")
     
     voice_c1, voice_c2 = st.columns([1, 1])
     with voice_c1:
-        audio_prompt = st.audio_input(f"🎙️ Click to Speak ({language})")
+        audio_prompt = st.audio_input(f"🎙️ Click microphone to record question ({language})", key="mic_audio_input")
     with voice_c2:
-        audio_file_prompt = st.file_uploader("📁 Or upload voice audio note (.wav / .mp3 / .m4a)", type=["wav", "mp3", "m4a", "ogg"])
+        audio_file_prompt = st.file_uploader("📁 Or upload audio note (.wav / .mp3 / .m4a)", type=["wav", "mp3", "m4a", "ogg"], key="file_audio_input")
 
-    transcribed_query = None
+    # Handle Voice Input
+    voice_query = None
     target_audio = audio_prompt or audio_file_prompt
     if target_audio is not None:
-        with st.spinner(f"Transcribing voice with Whisper-Large-v3 ({language})..."):
+        with st.spinner(f"Transcribing voice using Whisper-Large-v3 ({language})..."):
             t_text, t_engine = transcribe_audio(target_audio, language=language)
-            if t_text:
-                transcribed_query = t_text
-                st.info(f"🗣️ **Voice Recognized ({t_engine}):** *\"{transcribed_query}\"*")
+            if t_text and len(t_text.strip()) > 3:
+                voice_query = t_text
+                st.success(f"🗣️ **Voice Recognized ({t_engine}):** *\"{voice_query}\"*")
             else:
-                st.error("Could not transcribe voice audio. Please try speaking closer to the microphone or type below.")
+                st.warning("No clear speech detected. Please speak closer to your microphone or type below.")
 
     # Quick suggestion buttons
     st.markdown("<small>💡 Quick Farmer Questions:</small>", unsafe_allow_html=True)
     q_col1, q_col2, q_col3 = st.columns(3)
     quick_q = None
-    if q_col1.button("🔍 What disease is on my leaves and how to treat it?", use_container_width=True):
-        quick_q = "What disease is on my leaves and what spray should I apply?"
-    if q_col2.button("🌱 Are my soil NPK and moisture levels healthy?", use_container_width=True):
-        quick_q = "Are my soil NPK and moisture levels healthy for this crop?"
-    if q_col3.button("🌦️ Is today's weather safe for spraying pesticide?", use_container_width=True):
-        quick_q = "Is today's weather safe for spraying pesticide or should I delay?"
+    if q_col1.button("🌾 धान (चावल) कब और कैसे उगाएं?", use_container_width=True):
+        quick_q = "धान (चावल) कब और कैसे उगाएं? नर्सरी से कटाई तक पूरी विधि बताएं।"
+    if q_col2.button("🌱 क्या मेरे खेत की मिट्टी स्वस्थ है?", use_container_width=True):
+        quick_q = "मेरी मिट्टी के NPK, pH और नमी के स्तर की जांच करके खाद की सलाह दें।"
+    if q_col3.button("🌦️ क्या आज कीटनाशक छिड़काव के लिए मौसम सही है?", use_container_width=True):
+        quick_q = "आज के मौसम, हवा और तापमान के अनुसार क्या कीटनाशक छिड़काव करना सुरक्षित है?"
 
     # Text Input
-    user_prompt = st.chat_input("Or type your farming question here...")
+    user_prompt = st.chat_input("Or type your farming question here (e.g. चावल कब और कैसे उगाएं)...")
     
-    # Final query resolution priority: Voice > Quick Buttons > Text Input
-    final_query = transcribed_query or quick_q or user_prompt
+    # Clean query priority: Text input > Quick buttons > Voice query
+    # If the user typed text, always execute the typed text!
+    resolved_query = user_prompt or quick_q or voice_query
     
-    # Avoid duplicate execution on re-renders for same audio
-    if final_query and final_query != st.session_state.last_transcription:
-        st.session_state.last_transcription = final_query
-        
-        # Add user message to history
-        st.session_state.chat_history.append({"role": "user", "content": final_query, "audio_bytes": None})
-        with st.chat_message("user", avatar="👨‍🌾"):
-            st.markdown(final_query)
+    if resolved_query:
+        # Check if already processed to prevent rerun loops
+        last_user_msg = None
+        for m in reversed(st.session_state.chat_history):
+            if m["role"] == "user":
+                last_user_msg = m["content"]
+                break
+                
+        if resolved_query != last_user_msg:
+            # Add user message to history
+            st.session_state.chat_history.append({"role": "user", "content": resolved_query, "audio_bytes": None})
+            with st.chat_message("user", avatar="👨‍🌾"):
+                st.markdown(resolved_query)
+                
+            # Prepare injected contexts
+            v_summary = st.session_state.vision_result["summary"] if st.session_state.vision_result else "No crop disease detected. Routine farm check."
+            s_summary = st.session_state.soil_summary
+            w_summary = st.session_state.weather_summary
             
-        # Prepare injected contexts
-        v_summary = st.session_state.vision_result["summary"] if st.session_state.vision_result else "No image uploaded yet. Routine farm inspection."
-        s_summary = st.session_state.soil_summary
-        w_summary = st.session_state.weather_summary
-        
-        with st.chat_message("assistant", avatar="🌾"):
-            with st.spinner("AgroSageGPT is synthesizing Vision, Soil, Weather, ChromaDB, and Audio..."):
-                response_data = ask_agronomist(
-                    query=final_query,
-                    vision_summary=v_summary,
-                    soil_summary=s_summary,
-                    weather_summary=w_summary,
-                    language=language,
-                    chat_history=st.session_state.chat_history
-                )
-                answer_text = response_data["answer"]
-                engine_used = response_data.get("engine", "AgroSage Engine")
-                
-                st.markdown(answer_text)
-                
-                # Generate and render TTS audio if enabled
-                audio_bytes = None
-                if enable_tts:
-                    with st.spinner(f"Generating spoken audio readout in {language}..."):
-                        audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=language)
-                        if audio_bytes:
-                            st.audio(audio_bytes, format="audio/mp3")
-                
-                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
-                
-                with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
-                    for idx, doc in enumerate(response_data.get("retrieved_context", [])):
-                        st.markdown(f"**Source Document Chunk {idx+1}:**")
-                        st.text(doc)
-                        
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": answer_text,
-            "engine": engine_used,
-            "audio_bytes": audio_bytes
-        })
+            with st.chat_message("assistant", avatar="🌾"):
+                with st.spinner("AgroSageGPT is generating your agronomic prescription..."):
+                    response_data = ask_agronomist(
+                        query=resolved_query,
+                        vision_summary=v_summary,
+                        soil_summary=s_summary,
+                        weather_summary=w_summary,
+                        language=language,
+                        chat_history=st.session_state.chat_history
+                    )
+                    answer_text = response_data["answer"]
+                    engine_used = response_data.get("engine", "AgroSage Engine")
+                    
+                    st.markdown(answer_text)
+                    
+                    # Generate High-Definition Neural Speech if enabled
+                    audio_bytes = None
+                    if enable_tts:
+                        with st.spinner(f"Synthesizing high-definition neural voice in {language}..."):
+                            audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=language)
+                            if audio_bytes:
+                                st.audio(audio_bytes, format="audio/mp3")
+                                st.caption(f"🔊 Spoken by: {tts_engine_name}")
+                    
+                    st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
+                    
+                    with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
+                        for idx, doc in enumerate(response_data.get("retrieved_context", [])):
+                            st.markdown(f"**Source Document Chunk {idx+1}:**")
+                            st.text(doc)
+                            
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": answer_text,
+                "engine": engine_used,
+                "audio_bytes": audio_bytes
+            })

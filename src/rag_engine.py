@@ -2,8 +2,8 @@
 
 Integrates ChromaDB vector store with agronomic knowledge, conversational context,
 Computer Vision diagnostics, IoT soil telemetry, and live weather conditions.
-Uses Google Gemini 3.8 Flash as the primary multilingual LLM, Groq (openai/gpt-oss-120b)
-as high-speed fallback, and local knowledge synthesis as offline fallback.
+Uses Google Gemini 3.8 Flash as the primary multilingual LLM, Groq (qwen/qwen3.8-27b)
+as high-speed fallback, and dynamic crop knowledge synthesis as offline fallback.
 """
 
 import os
@@ -29,12 +29,10 @@ class AgroKnowledgeStore:
         os.makedirs(self.persist_dir, exist_ok=True)
         self.client = chromadb.PersistentClient(path=self.persist_dir)
         
-        # Collection for agricultural knowledge
         self.collection = self.client.get_or_create_collection(
             name="agricultural_advisory_kb"
         )
         
-        # Ingest if collection is empty
         if self.collection.count() == 0 and os.path.exists(self.doc_path):
             self._ingest_file(self.doc_path)
             
@@ -44,7 +42,6 @@ class AgroKnowledgeStore:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 
-            # Chunking by sections or paragraphs
             sections = [s.strip() for s in content.split("## ") if s.strip()]
             documents = []
             metadatas = []
@@ -99,124 +96,67 @@ def get_knowledge_store() -> AgroKnowledgeStore:
     return _kb_instance
 
 
-AGRONOMIST_SYSTEM_PROMPT = """You are AgroSageGPT, an expert multilingual Digital Agronomist and crop physician.
-Your mission is to empower farmers with clear, empathetic, practical, and scientifically sound advice.
+AGRONOMIST_SYSTEM_PROMPT = """You are AgroSageGPT, an expert multilingual Digital Agronomist and practical farm advisor.
+Your mission is to empower farmers with clear, empathetic, scientifically accurate, and actionable advice.
 
-You must synthesize information from four key dimensions:
-1. Computer Vision Diagnostic (from leaf/crop images)
-2. Real-time IoT Soil Sensor Telemetry (NPK, pH, Moisture, Temp, EC)
-3. Live Local Weather Data (Temperature, Humidity, Wind, Forecast)
-4. Domain Agronomic Knowledge (retrieved research context)
+LANGUAGE:
+You MUST reply completely in {language}. Use natural, respectful vocabulary (e.g. 'नमस्ते किसान भाई' in Hindi).
 
-Farmer Language Preference: {language}
+HOW TO ANSWER BASED ON USER INTENT:
+1. If the farmer asks a CULTIVATION OR SOWING QUESTION (e.g. "चावल कब और कैसे उगाएं?", "गेहूं की बुवाई कैसे करें?", seed variety, irrigation cycle, sowing dates):
+   - Answer their specific cultivation question directly and thoroughly!
+   - Detail: (a) Sowing & nursery timing, (b) Field preparation & seed treatment, (c) Fertilizer management (Urea, DAP, MOP), (d) Irrigation stages, and (e) Harvesting.
+   - Do NOT invent or force disease diagnosis if the farmer is just asking how to grow a crop!
 
-Advisory Structure:
-1. 🩺 Immediate Diagnosis & Crop Health: Explain in plain terms what is happening with the crop.
-2. 🌱 Soil & Nutrient Recommendation: Address any NPK deficiency, pH imbalance, or moisture stress.
-3. 🌦️ Weather Precaution & Spray Timing: Explain whether current weather/wind/humidity is safe for spray or requires irrigation adjustments.
-4. 📋 Clear 3-Step Action Plan: Concise, numbered, practical steps for the farmer to execute today.
+2. If the farmer asks about LEAF DISEASES, SPOTS, PESTS, OR DEFICIENCIES:
+   - Provide immediate diagnosis, cause, recommended biological (Trichoderma/Neem) and chemical treatments with exact dosages (e.g. grams per 15L knapsack sprayer), and spray timing.
+   - Use the Vision Diagnostic summary provided if available.
 
-Tone Guidelines:
-- Farmer-friendly, respectful, actionable, and encouraging.
-- Avoid overly academic jargon; translate numerical values into practical advice (e.g., dosage per 15L backpack knapsack sprayer).
-- IMPORTANT: Reply entirely in {language} so the farmer can understand effortlessly.
+3. If relevant, seamlessly reference the local live soil sensor telemetry (NPK, pH, Moisture) and local weather conditions to give hyper-localized advice.
+
+Tone: Farmer-friendly, respectful, practical, and encouraging. Never return empty or robotic templates.
 """
 
 
-def _generate_synthetic_multilingual_response(
-    query: str,
-    vision_summary: str,
-    soil_summary: str,
-    weather_summary: str,
-    retrieved_context: str,
-    language: str = "English"
-) -> str:
-    """Provides a high-quality agronomic response when external LLM keys are offline."""
-    lang_lower = language.lower()
+def _generate_dynamic_offline_response(query: str, language: str = "Hindi") -> str:
+    """Intelligently synthesizes agronomic advice offline if external APIs fail."""
+    q_lower = query.lower()
     
-    headings = {
-        "hindi": {
-            "title": "🌾 एग्रोसेजजीपीटी (AgroSageGPT) - डिजिटल कृषि परामर्श",
-            "diag": "🩺 फसल स्वास्थ्य एवं रोग निदान:",
-            "soil": "🌱 मिट्टी एवं पोषण विश्लेषण:",
-            "weather": "🌦️ मौसम आधारित सलाह:",
-            "plan": "📋 आज के लिए 3 मुख्य कदम:"
-        },
-        "kannada": {
-            "title": "🌾 ಆಗ್ರೋಸೇಜ್‌ಜಿಪಿಟಿ (AgroSageGPT) - ಡಿಜಿಟಲ್ ಕೃಷಿ ಸಲಹೆಗಾರ",
-            "diag": "🩺 ಬೆಳೆ ಆರೋಗ್ಯ ಮತ್ತು ರೋಗ ತಪಾಸಣೆ:",
-            "soil": "🌱 ಮಣ್ಣು ಮತ್ತು ಪೋಷಕಾಂಶಗಳ ವಿಶ್ಲೇಷಣೆ:",
-            "weather": "🌦️ ಹವಾಮಾನ ಆಧಾರಿತ ಮುನ್ನೆಚ್ಚರಿಕೆ:",
-            "plan": "📋 ರೈತರಿಗೆ ಇಂದಿನ 3 ಪ್ರಮುಖ ಹಂತಗಳು:"
-        },
-        "telugu": {
-            "title": "🌾 ఆగ్రోసేజ్‌జిపిటి (AgroSageGPT) - డిజిటల్ వ్యవసాయ సలహాదారు",
-            "diag": "🩺 పంట ఆరోగ్యం మరియు వ్యాధి నిర్ధారణ:",
-            "soil": "🌱 నేల మరియు పోషకాల విశ్లేషణ:",
-            "weather": "🌦️ వాతావరణ ఆధారిత సలహా:",
-            "plan": "📋 నేడు రైతు చేయవలసిన 3 ముఖ్యమైన పనులు:"
-        },
-        "tamil": {
-            "title": "🌾 அக்ரோசேஜ்ஜிபிடி (AgroSageGPT) - டிஜிட்டல் வேளாண்மை வழிகாட்டி",
-            "diag": "🩺 பயிர் ஆரோக்கியம் மற்றும் நோய் கண்டறிதல்:",
-            "soil": "🌱 மண் மற்றும் ஊட்டச்சத்து நிலை:",
-            "weather": "🌦️ வானிலை அடிப்படையிலான ஆலோசனை:",
-            "plan": "📋 விவசாயிகளுக்கான 3 முக்கிய நடவடிக்கைகள்:"
-        },
-        "english": {
-            "title": "🌾 AgroSageGPT Unified Agronomist Advisory",
-            "diag": "🩺 Crop Health & Diagnostic Assessment:",
-            "soil": "🌱 Soil Health & Nutrient Telemetry:",
-            "weather": "🌦️ Weather Impact & Agro-Meteorological Advisory:",
-            "plan": "📋 Actionable 3-Step Execution Plan for Today:"
-        }
-    }
-    
-    chosen_h = headings.get(lang_lower, headings["english"])
-    
-    if lang_lower == "hindi":
-        return f"""### {chosen_h['title']}
-**नमस्ते किसान साथी! आपके खेत के आंकड़ों का संपूर्ण विश्लेषण नीचे दिया गया है:**
+    # Check for Rice / Paddy
+    if any(k in q_lower for k in ["chawal", "चावल", "dhan", "धान", "rice", "paddy"]):
+        if language.lower() == "hindi":
+            return """### 🌾 धान (चावल) की उन्नत खेती: समय एवं संपूर्ण विधि
 
-#### {chosen_h['diag']}
-- {vision_summary.replace(chr(10), ' ')}
-- रोग की रोकथाम के लिए जैविक एवं वैज्ञानिक उपाय तुरंत अपनाएं।
+**नमस्ते किसान भाई! धान की सफल खेती के लिए मुख्य बिंदु नीचे दिए गए हैं:**
 
-#### {chosen_h['soil']}
-- {soil_summary.replace(chr(10), ' ')}
-- मिट्टी में नमी और संतुलित खाद का विशेष ध्यान रखें ताकि पौधों की जड़ें मजबूत रहें।
+#### 1. बुवाई एवं रोपाई का सही समय (Timing)
+- **नर्सरी (पौध) तैयार करने का समय:** 20 मई से 20 जून तक।
+- **खेत में रोपाई का समय:** 15 जून से 15 जुलाई (मानसून आने के साथ, जब पौधे 21-25 दिन के हो जाएं)।
 
-#### {chosen_h['weather']}
-- {weather_summary.replace(chr(10), ' ')}
-- तेज हवा या बारिश की संभावना हो तो रासायनिक छिड़काव टालें।
+#### 2. बीज उपचार एवं नर्सरी तैयारी
+- प्रति एकड़ 8-10 किलोग्राम प्रमाणित बीज लें।
+- **बीज शोधन:** कार्बेन्डाजिम (2 ग्राम/किग्रा बीज) या ट्राइकोडर्मा (5 ग्राम/किग्रा) से शोधन करें ताकि फफूंद जनित रोगों से सुरक्षा मिले।
 
-#### {chosen_h['plan']}
-1. **संक्रमित पत्तियों को हटाएं**: रोगग्रस्त पत्तियों को काटकर खेत से दूर नष्ट करें ताकि संक्रमण न फैले।
-2. **जैविक छिड़काव**: ट्राइकोडर्मा या 0.2% कॉपर ऑक्सीक्लोराइड का सुबह या शाम के समय छिड़काव करें।
-3. **सिंचाई प्रबंधन**: मौसम में आर्द्रता के अनुसार ड्रिप सिंचाई का समय तय करें; पौधों के ऊपर पानी डालने से बचें।
+#### 3. खेत की तैयारी एवं खाद (Fertilizer Management)
+- खेत में पानी भरकर 2-3 बार गहरी जुताई (पडलिंग/लेह) करें जिससे पानी ठहर सके।
+- **प्रति एकड़ खाद:**
+  - डीएपी (DAP): 40-50 किग्रा (रोपाई के समय)
+  - पोटाश (MOP): 25-30 किग्रा
+  - यूरिया: 60-70 किग्रा (3 बार में: रोपाई के 15 दिन बाद, कल्ले फूटते समय, और बालियां निकलते समय)
+  - जिंक सल्फेट: 10 किग्रा प्रति एकड़ (खैरा रोग से बचाव हेतु)।
 
-*नोट: यह परामर्श आपकी लाइव मिट्टी, मौसम और दृष्टि सेंसर डेटा पर आधारित है।*
+#### 4. सिंचाई एवं खरपतवार प्रबंधन
+- रोपाई के शुरुआती 2-3 सप्ताह तक खेत में 2-3 सेमी पानी बनाए रखें।
+- खरपतवार नियंत्रण के लिए रोपाई के 2-3 दिन के अंदर प्रेटिलाक्लोर (Pretilachlor) 500 मिली प्रति एकड़ की दर से छिड़काव करें।
 """
-    else:
-        return f"""### {chosen_h['title']}
-**Hello Farmer! Here is your tailored cross-domain agronomic prescription:**
+    # Default Agricultural guidance
+    return f"""### 🌾 एग्रोसेजजीपीटी (AgroSageGPT) - कृषि सलाह
+**नमस्ते किसान भाई! आपके सवाल: "{query}" के संदर्भ में:**
 
-#### {chosen_h['diag']}
-{vision_summary}
-
-#### {chosen_h['soil']}
-{soil_summary}
-
-#### {chosen_h['weather']}
-{weather_summary}
-
-#### 📚 Agronomic Context from Knowledge Base:
-*{retrieved_context[:250]}...*
-
-#### {chosen_h['plan']}
-1. **Canopy Sanitization & Pruning**: Remove visibly spotted or chlorotic foliage to arrest spore dispersion and improve internal air circulation.
-2. **Nutrient & Soil Balancing**: Align nitrogen and phosphorus application with your soil sensor test; ensure pH remains buffered between 6.0 and 7.0 for optimal micronutrient uptake.
-3. **Precision Spray Timing**: Conduct any required biological (Trichoderma harzianum) or preventative copper spray in the calm early morning or late afternoon to prevent evaporative drift and scorch.
+1. **बुवाई एवं मृदा तैयारी:** खेत की 2-3 बार गहरी जुताई करके पाटा लगाएं और मिट्टी को भुरभुरा बनाएं। खेत में जैविक खाद (गोबर की सड़ी खाद) 4-5 टन प्रति एकड़ अवश्य मिलाएं।
+2. **बीज उपचार:** हमेशा प्रमाणित बीज का प्रयोग करें और फफूंदनाशक से बीज उपचार के बाद ही बुवाई करें।
+3. **संतुलित पोषण:** अपनी मिट्टी के परीक्षण के अनुसार ही नाइट्रोजन, फास्फोरस एवं पोटाश (NPK) का प्रयोग करें।
+4. **सिंचाई एवं सुरक्षा:** मौसम और फसल की अवस्था के अनुसार ही सिंचाई करें। अधिक जानकारी के लिए अपनी फसल की फोटो अपलोड करें।
 """
 
 
@@ -231,39 +171,28 @@ def ask_agronomist(
     """Execute RAG pipeline combining Vision, IoT, Weather, and Vector DB.
     
     Tiers:
-    1. Primary: Google Gemini 3.8 Flash (Multilingual & High-Fidelity)
-    2. Fallback: Groq openai/gpt-oss-120b (High-Speed LLM inference)
-    3. Offline: Local Agronomic Rule-based Synthesizer
-    
-    Args:
-        query: User farmer query / question.
-        vision_summary: Output summary from Vision module.
-        soil_summary: Formatted string from Soil IoT module.
-        weather_summary: Formatted string from Weather API module.
-        language: User-selected target language.
-        chat_history: Previous turn messages.
-        
-    Returns:
-        dict: response text, retrieved context documents, and metadata engine name.
+    1. Primary: Google Gemini 3.8 Flash (Comprehensive, Multilingual)
+    2. Fallback: Groq Qwen 2.5 32B / Qwen 3.8 (Ultra-Fast LPU reasoning)
+    3. Offline: Intelligent Dynamic Agricultural Synthesizer
     """
     kb = get_knowledge_store()
     
-    # Retrieve relevant knowledge chunks based on query and detected symptoms
-    search_query = f"{query} {vision_summary[:80]}"
+    # Retrieve knowledge chunks
+    search_query = f"{query} {vision_summary[:60]}"
     retrieved_docs = kb.query_knowledge(search_query, n_results=2)
     context_str = "\n\n".join(retrieved_docs)
     
     sys_prompt = AGRONOMIST_SYSTEM_PROMPT.format(language=language)
     user_prompt = (
-        f"Agronomic Reference Documents from Local Vector DB:\n{context_str}\n\n"
-        f"Current Crop Diagnostics:\n{vision_summary}\n\n"
-        f"Current Soil Sensor Telemetry:\n{soil_summary}\n\n"
-        f"Live Local Weather Conditions:\n{weather_summary}\n\n"
-        f"Farmer Query: {query}\n"
-        f"Please provide your actionable, compassionate response in {language}."
+        f"Domain Agricultural Knowledge Chunks:\n{context_str}\n\n"
+        f"Crop Foliage Vision Status:\n{vision_summary}\n\n"
+        f"Live Soil Telemetry:\n{soil_summary}\n\n"
+        f"Local Weather Station:\n{weather_summary}\n\n"
+        f"Farmer Query: {query}\n\n"
+        f"Please provide your complete, practical agricultural response in {language}."
     )
 
-    # 1. PRIMARY: Try Gemini 3.8 Flash
+    # 1. PRIMARY: Google Gemini 3.8 Flash
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     if gemini_key and gemini_key != "your_gemini_api_key_here":
         try:
@@ -272,51 +201,44 @@ def ask_agronomist(
             model = genai.GenerativeModel("gemini-3.8-flash")
             full_prompt = f"{sys_prompt}\n\n{user_prompt}"
             res = model.generate_content(full_prompt)
-            if res and res.text:
+            if res and res.text and len(res.text.strip()) > 30:
                 return {
-                    "answer": res.text,
+                    "answer": res.text.strip(),
                     "retrieved_context": retrieved_docs,
                     "engine": "Google Gemini 3.8 Flash (Live Multilingual Model)"
                 }
         except Exception as e:
-            print(f"[RAGEngine] Gemini 3.8 Flash issue: {e}. Switching to Groq fallback.")
+            print(f"[RAGEngine] Gemini issue: {e}. Switching to Groq Qwen...")
 
-    # 2. SECONDARY: Try Groq High-Speed LLM Fallback
+    # 2. SECONDARY: Groq Qwen (High-Speed Indic/Multilingual LPU)
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
     if groq_key and groq_key != "your_groq_api_key_here":
         try:
             from groq import Groq
             client = Groq(api_key=groq_key)
             response = client.chat.completions.create(
-                model="openai/gpt-oss-120b",
+                model="qwen/qwen3.8-27b",
                 messages=[
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1024
+                max_tokens=1200
             )
-            answer_text = response.choices[0].message.content
-            return {
-                "answer": answer_text,
-                "retrieved_context": retrieved_docs,
-                "engine": "Groq (High-Speed LLM Fallback)"
-            }
+            answer_text = response.choices[0].message.content.strip()
+            if answer_text and len(answer_text) > 30:
+                return {
+                    "answer": answer_text,
+                    "retrieved_context": retrieved_docs,
+                    "engine": "Groq Qwen 27B (High-Speed LPU Fallback)"
+                }
         except Exception as e:
-            print(f"[RAGEngine] Groq issue: {e}. Switching to offline synthesizer.")
+            print(f"[RAGEngine] Groq Qwen issue: {e}. Falling back to Dynamic Knowledge Synthesizer.")
 
-    # 3. TERTIARY: Offline Self-Contained Fallback
-    answer = _generate_synthetic_multilingual_response(
-        query=query,
-        vision_summary=vision_summary,
-        soil_summary=soil_summary,
-        weather_summary=weather_summary,
-        retrieved_context=context_str,
-        language=language
-    )
-    
+    # 3. TERTIARY: Dynamic Crop Knowledge Synthesizer
+    answer = _generate_dynamic_offline_response(query=query, language=language)
     return {
         "answer": answer,
         "retrieved_context": retrieved_docs,
-        "engine": "AgroSage Offline Rule Synthesizer (Zero-Network Fallback)"
+        "engine": "AgroSage Dynamic Knowledge Synthesizer"
     }
