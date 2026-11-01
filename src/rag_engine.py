@@ -70,7 +70,70 @@ class AgroKnowledgeStore:
         except Exception as e:
             print(f"[AgroKnowledgeStore] Ingestion note: {e}")
 
-    def query_knowledge(self, query_text: str, n_results: int = 3) -> List[str]:
+    def ingest_user_document(self, file_bytes: bytes, filename: str) -> int:
+        """Dynamically ingests custom agricultural documents (PDF, TXT, MD) on the fly."""
+        import io
+        import uuid
+        
+        text = ""
+        fn_lower = filename.lower()
+        if fn_lower.endswith(".pdf"):
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+                for page_idx, page in enumerate(reader.pages):
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += f"\n--- Page {page_idx+1} ---\n" + extracted
+            except Exception as e:
+                print(f"[AgroKnowledgeStore] PDF extraction error: {e}")
+        else:
+            try:
+                text = file_bytes.decode("utf-8", errors="ignore")
+            except Exception:
+                text = str(file_bytes)
+
+        if not text.strip():
+            return 0
+
+        # Chunk text into ~500 character paragraphs with source attribution
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        chunks = []
+        current_chunk = ""
+        for p in paragraphs:
+            if len(current_chunk) + len(p) < 700:
+                current_chunk += "\n" + p
+            else:
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                current_chunk = p
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        if not chunks:
+            chunks = [text[:1000]]
+
+        documents = []
+        metadatas = []
+        ids = []
+        doc_prefix = uuid.uuid4().hex[:6]
+        for i, chunk in enumerate(chunks):
+            documents.append(f"Document [{filename}]:\n{chunk}")
+            metadatas.append({"source": filename, "chunk": i})
+            ids.append(f"custom_{doc_prefix}_{i}")
+
+        try:
+            self.collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+            return len(documents)
+        except Exception as e:
+            print(f"[AgroKnowledgeStore] ChromaDB custom add error: {e}")
+            return 0
+
+    def query_knowledge(self, query_text: str, n_results: int = 4) -> List[str]:
         """Retrieve most relevant agricultural recommendations."""
         if not self.collection or self.collection.count() == 0:
             return ["Consult standard agricultural extension office practices."]

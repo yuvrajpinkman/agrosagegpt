@@ -11,3 +11,5 @@ requests
 google-generativeai
 groq
 gTTS
+edge-tts
+pypdf

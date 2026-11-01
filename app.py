@@ -1,10 +1,15 @@
 """AgroSageGPT: Multilingual Generative AI Digital Agronomist.
 
-Main Streamlit Application combining Computer Vision, IoT Soil Analytics,
-Live Weather Telemetry, Cross-Domain Multilingual RAG, Voice STT & Voice TTS.
+Modern Light-Theme Conversational UI with:
+- Unified Chat Feed
+- Downside Input Dock (Image Attachment, Voice Recording, Dynamic RAG Documents)
+- Top Compact Telemetry Bar (Live Weather + 7-in-1 Soil Sensors)
+- Dynamic On-The-Fly Document Ingestion into ChromaDB
+- High-Definition Neural TTS & Gemini Flash ASR Pipeline
 """
 
 import os
+import io
 import streamlit as st
 from PIL import Image
 import pandas as pd
@@ -20,54 +25,78 @@ from src.stt_engine import transcribe_audio
 
 load_dotenv()
 
-# Streamlit Page Config
+# Streamlit Page Config - Light Mode Enforced
 st.set_page_config(
-    page_title="AgroSageGPT | Multilingual Digital Agronomist",
+    page_title="AgroSageGPT | Digital Agronomist",
     page_icon="🌱",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom Styling for modern accessible UI
+# Modern Light-Mode CSS
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.2rem;
+    /* Global Light Background and Typography */
+    .stApp {
+        background-color: #fafbfa;
+        color: #1a2e1a;
+    }
+    
+    /* Top Header Bar */
+    .top-brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.8rem 1rem;
+        background: #ffffff;
+        border-bottom: 1px solid #e1e8e1;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 40, 0, 0.04);
+    }
+    .brand-title {
+        font-size: 1.5rem;
         font-weight: 700;
         color: #1b5e20;
-        margin-bottom: 0.2rem;
     }
-    .sub-header {
-        font-size: 1.05rem;
-        color: #424242;
-        margin-bottom: 1.5rem;
+    .brand-subtitle {
+        font-size: 0.85rem;
+        color: #4a6b4a;
     }
-    .metric-card {
-        background-color: #f1f8e9;
+    
+    /* Telemetry Ribbon Card */
+    .telemetry-ribbon {
+        background: #ffffff;
+        border: 1px solid #e2ece2;
         border-radius: 10px;
-        padding: 14px;
-        border-left: 5px solid #4caf50;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        padding: 10px 14px;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
-    .status-badge {
-        font-weight: 600;
-        padding: 3px 8px;
+    
+    /* Modern Action Dock at downside */
+    .action-dock {
+        background: #ffffff;
+        border: 1px solid #dce6dc;
         border-radius: 12px;
-        font-size: 0.82rem;
+        padding: 10px 14px;
+        margin-top: 10px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
     }
-    .badge-optimal { background-color: #c8e6c9; color: #2e7d32; }
-    .badge-warning { background-color: #fff9c4; color: #f57f17; }
-    .badge-alert { background-color: #ffcdd2; color: #c62828; }
+    
+    /* Status tags & badges */
     .engine-tag {
-        font-size: 0.78rem;
-        color: #555;
-        background: #f0f4f8;
-        padding: 2px 8px;
+        font-size: 0.76rem;
+        color: #4b634b;
+        background: #eef5ee;
+        padding: 3px 8px;
         border-radius: 6px;
         display: inline-block;
         margin-top: 6px;
-        margin-right: 6px;
     }
+    .badge-optimal { background-color: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 0.8rem;}
+    .badge-alert { background-color: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 0.8rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,9 +105,10 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         {
             "role": "assistant",
-            "content": "Namaste! I am **AgroSageGPT**, your Digital Agronomist. You can ask me any farming question by typing or speaking in Hindi, Kannada, Telugu, Tamil, or English. You can also upload crop photos for leaf disease diagnostics.",
+            "content": "Namaste! I am **AgroSageGPT**, your Generative AI Digital Agronomist.\n\nYou can ask me questions about crop management, sowing schedules, fertilizer dosing, or plant health. Use the toolbar at the bottom to **attach leaf photos**, **speak via microphone**, or **upload custom agricultural manuals (PDF/TXT)**.",
             "engine": "AgroSage Welcome Agent",
-            "audio_bytes": None
+            "audio_bytes": None,
+            "attached_image": None
         }
     ]
 
@@ -91,26 +121,23 @@ if "weather_data" not in st.session_state:
     st.session_state.weather_data = get_weather_data()
     st.session_state.weather_summary = format_weather_summary(st.session_state.weather_data)
 
-if "vision_result" not in st.session_state:
-    st.session_state.vision_result = None
-
-if "vision_audio" not in st.session_state:
-    st.session_state.vision_audio = None
+if "active_vision_summary" not in st.session_state:
+    st.session_state.active_vision_summary = "No crop disease detected. General field management."
 
 if "mic_key_idx" not in st.session_state:
     st.session_state.mic_key_idx = 0
 
-if "file_audio_key_idx" not in st.session_state:
-    st.session_state.file_audio_key_idx = 0
+if "uploaded_doc_names" not in st.session_state:
+    st.session_state.uploaded_doc_names = []
 
-# Sidebar Configuration
+# Sidebar for Preferences & Settings
 with st.sidebar:
-    st.markdown("### 🌾 AgroSage Settings")
+    st.markdown("### 🌾 Farm Configuration")
     
     language = st.selectbox(
-        "🌐 Language / भाषा / ಭಾಷೆ / భాష / மொழி:",
-        ["English", "Hindi", "Kannada", "Telugu", "Tamil"],
-        index=1  # Default to Hindi for Indian agronomist experience
+        "🌐 Language / भाषा:",
+        ["Hindi", "English", "Kannada", "Telugu", "Tamil"],
+        index=0
     )
     
     crop_type = st.selectbox(
@@ -119,326 +146,259 @@ with st.sidebar:
         index=0
     )
     
-    city_input = st.text_input(
-        "📍 Farm Location (City):",
-        value=os.getenv("DEFAULT_LOCATION", "Bengaluru")
-    )
-    
-    if st.button("🔄 Sync Weather for Location", use_container_width=True):
+    city_input = st.text_input("📍 Farm City:", value=os.getenv("DEFAULT_LOCATION", "Bengaluru"))
+    if st.button("🔄 Sync Weather Location", use_container_width=True):
         st.session_state.weather_data = get_weather_data(city_input)
         st.session_state.weather_summary = format_weather_summary(st.session_state.weather_data)
-        st.toast(f"Weather synced for {city_input}!", icon="🌤️")
+        st.toast(f"Synced weather for {city_input}!", icon="🌤️")
 
     st.markdown("---")
-    st.markdown("### 🎙️ Voice & Audio Settings")
-    enable_tts = st.toggle("🔊 Read Answers Aloud (Neural TTS)", value=True, help="Automatically plays crystal-clear spoken advice in your language.")
-
+    enable_tts = st.toggle("🔊 Read Answers Aloud (TTS)", value=True)
+    
     st.markdown("---")
-    st.markdown("### ⚙️ Production Telemetry & APIs")
-    
-    ow_key = os.getenv("OPENWEATHER_API_KEY", "").strip()
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-    groq_key = os.getenv("GROQ_API_KEY", "").strip()
-
-    if ow_key and ow_key != "your_openweather_api_key_here":
-        st.success("🟢 OpenWeatherMap Live API Connected")
+    st.markdown("### 📚 Custom Knowledge Base")
+    st.caption("Documents dynamically ingested into ChromaDB:")
+    if st.session_state.uploaded_doc_names:
+        for doc_name in st.session_state.uploaded_doc_names:
+            st.markdown(f"• 📄 `{doc_name}`")
     else:
-        st.warning("🟡 OpenWeatherMap (Simulated)")
-
-    if gemini_key and gemini_key != "your_gemini_api_key_here":
-        st.success("🟢 Gemini 3.8 Flash (Multimodal & RAG)")
-    else:
-        st.warning("🟡 Gemini (Offline)")
-
-    if groq_key and groq_key != "your_groq_api_key_here":
-        st.success("🟢 Groq Whisper-v3 (Voice STT)")
-        st.success("🟢 Groq Qwen-27B (LPU Fast Fallback)")
-    else:
-        st.warning("🟡 Groq (Offline)")
-
-    st.success("🟢 High-Definition Neural Voice TTS Online")
-    st.success("🟢 Ultralytics YOLOv8 Loaded")
-    st.success("🟢 ChromaDB Vector Store Active")
-    st.success("🟢 7-in-1 IoT Soil Telemetry Online")
-    
+        st.caption("*No custom files uploaded yet. Default agronomic KB active.*")
+        
     st.markdown("---")
     if st.button("🧹 Clear Chat History", use_container_width=True):
         st.session_state.chat_history = [
-            {"role": "assistant", "content": "Chat history cleared. How can I assist you with your farm today?", "engine": "AgroSage Reset", "audio_bytes": None}
+            {"role": "assistant", "content": "Chat cleared. What would you like to discuss about your crops today?", "engine": "AgroSage Reset", "audio_bytes": None, "attached_image": None}
         ]
-        st.session_state.vision_audio = None
+        st.session_state.active_vision_summary = "No crop disease detected. General field management."
         st.rerun()
 
-# Header
-st.markdown('<div class="main-header">🌱 AgroSageGPT: Multilingual Digital Agronomist</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Production AI Platform with Gemini Multimodal Vision, IoT Soil Telemetry, Whisper Voice STT, ChromaDB RAG & Neural Voice TTS</div>', unsafe_allow_html=True)
+# ----------------- TOP BRANDING & TELEMETRY BAR -----------------
+st.markdown("""
+<div class="top-brand">
+    <div>
+        <div class="brand-title">🌱 AgroSageGPT</div>
+        <div class="brand-subtitle">Multilingual Generative AI Digital Agronomist • Light Edition</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# Tabs
-tab_vision, tab_weather, tab_soil, tab_chat = st.tabs([
-    "📸 Crop Disease Vision",
-    "🌦️ Real-time Weather",
-    "🧪 IoT Soil Telemetry",
-    "💬 Digital Agronomist Chat"
-])
+# Compact Horizontal Telemetry Ribbon
+w = st.session_state.weather_data
+s = st.session_state.soil_dict
 
-# ----------------- TAB 1: VISION MODULE -----------------
-with tab_vision:
-    st.subheader("📸 Crop & Leaf Pathology Diagnostic (Gemini Multimodal + YOLOv8)")
-    st.caption("Upload a foliage photo or select a test sample. Evaluated directly by Gemini 3.8 Flash Vision for accurate disease identification, with spatial YOLO bounding boxes.")
+with st.expander(f"📊 Live Field Telemetry ({w.get('city', 'Farm')}) • 🌡️ {w['temperature_c']}°C | 💧 Humidity {w['humidity_pct']}% | 🧪 NPK {s['nitrogen']['value']}-{s['phosphorus']['value']}-{s['potassium']['value']} | ⚖️ pH {s['ph']['value']}", expanded=False):
+    t_c1, t_c2, t_c3, t_c4, t_c5 = st.columns(5)
+    t_c1.metric("Temperature", f"{w['temperature_c']} °C", f"Feels {w['feels_like_c']} °C")
+    t_c2.metric("Humidity", f"{w['humidity_pct']} %", w['condition'])
+    t_c3.metric("Wind Speed", f"{w['wind_speed_ms']} m/s", "Drift safe" if w['wind_speed_ms'] < 4.5 else "High drift")
+    t_c4.metric("NPK Level", f"{s['nitrogen']['value']}-{s['phosphorus']['value']}-{s['potassium']['value']}", "Optimal" if s['nitrogen']['status'] == "Medium" else "Review")
+    t_c5.metric("Soil Moisture", f"{s['moisture']['value']} %", s['moisture']['status'])
     
-    col_v1, col_v2 = st.columns([1, 1])
-    
-    with col_v1:
-        uploaded_file = st.file_uploader("Upload leaf/crop image", type=["jpg", "jpeg", "png"])
-        
-        st.write("Or test with pre-loaded field samples:")
-        sample_col1, sample_col2 = st.columns(2)
-        use_diseased = sample_col1.button("🍃 Load Diseased Leaf Sample", use_container_width=True)
-        use_healthy = sample_col2.button("🌿 Load Healthy Leaf Sample", use_container_width=True)
-        
-        target_img = None
-        if uploaded_file is not None:
-            target_img = Image.open(uploaded_file)
-        elif use_diseased and os.path.exists("sample_data/sample_diseased_leaf.jpg"):
-            target_img = Image.open("sample_data/sample_diseased_leaf.jpg")
-        elif use_healthy and os.path.exists("sample_data/sample_healthy_leaf.jpg"):
-            target_img = Image.open("sample_data/sample_healthy_leaf.jpg")
-            
-        if target_img is not None:
-            st.image(target_img, caption="Input Crop Foliage", use_container_width=True)
-            if st.button("🔍 Run Computer Vision Diagnostic", type="primary", use_container_width=True):
-                with st.spinner("Analyzing foliage with Gemini 3.8 Flash Multimodal Vision & YOLOv8..."):
-                    res = analyze_crop_image(target_img, crop_type=crop_type)
-                    st.session_state.vision_result = res
-                    
-                    if enable_tts:
-                        diag_text = f"Diagnosis for {crop_type}: {res['disease_diagnosis']['condition']}. {res['disease_diagnosis']['recommendation']}"
-                        audio_data, _ = synthesize_speech(diag_text, language=language)
-                        st.session_state.vision_audio = audio_data
-                    else:
-                        st.session_state.vision_audio = None
-                        
-                    st.success("Diagnosis Complete!")
-                    
-    with col_v2:
-        if st.session_state.vision_result is not None:
-            v_res = st.session_state.vision_result
-            st.image(v_res["annotated_image"], caption="YOLOv8 Spatial Localization & Bounding Boxes", use_container_width=True)
-            
-            diag = v_res["disease_diagnosis"]
-            severity_color = "badge-alert" if "High" in diag["severity"] else ("badge-warning" if "Moderate" in diag["severity"] or "Mild" in diag["severity"] else "badge-optimal")
-            
-            st.markdown(f"### Assessment: **{diag['condition']}**")
-            st.markdown(f"**Confidence:** `{diag['confidence'] * 100:.1f}%` | **Severity:** <span class='status-badge {severity_color}'>{diag['severity']}</span>", unsafe_allow_html=True)
-            st.caption(f"🔬 Diagnosed by: **{diag.get('source', 'Vision Engine')}**")
-            st.info(f"**Symptoms:** {diag['symptoms']}")
-            st.warning(f"**Recommended Field Action:** {diag['recommendation']}")
-            
-            if st.session_state.vision_audio is not None:
-                st.markdown("🔊 **Spoken Voice Advisory:**")
-                st.audio(st.session_state.vision_audio, format="audio/mp3")
-        else:
-            st.info("Upload or select an image on the left and click **'Run Computer Vision Diagnostic'** to view the multimodal pathology report.")
-
-
-# ----------------- TAB 2: WEATHER MODULE -----------------
-with tab_weather:
-    st.subheader(f"🌦️ Real-time Weather Telemetry ({st.session_state.weather_data.get('city', 'Local Farm')})")
-    st.caption(f"Source: {st.session_state.weather_data.get('source')}")
-    
-    w = st.session_state.weather_data
-    w_col1, w_col2, w_col3, w_col4 = st.columns(4)
-    w_col1.metric("Temperature", f"{w['temperature_c']} °C", f"Feels like {w['feels_like_c']} °C")
-    w_col2.metric("Relative Humidity", f"{w['humidity_pct']} %", "Moisture in air")
-    w_col3.metric("Wind Speed", f"{w['wind_speed_ms']} m/s", "Foliar drift factor")
-    w_col4.metric("Atmospheric Pressure", f"{w['pressure_hpa']} hPa", w['condition'])
-    
-    st.markdown("---")
-    st.markdown("#### 🌾 Agro-Meteorological Advisory")
-    st.write(st.session_state.weather_summary)
-
-
-# ----------------- TAB 3: SOIL IOT MODULE -----------------
-with tab_soil:
-    st.subheader("🧪 7-in-1 IoT Soil Sensor Telemetry")
-    st.caption("Edge telemetry streaming: Nitrogen (N), Phosphorus (P), Potassium (K), pH, Moisture, Temperature, EC.")
-    
-    if st.button("📡 Simulate New Soil Sensor Telemetry Reading", type="secondary"):
+    st.caption(f"Weather Source: {w.get('source')} | Soil: 7-in-1 IoT Telemetry")
+    if st.button("📡 Simulate New Soil Telemetry Event", type="secondary"):
         st.session_state.soil_df = generate_soil_history(hours=24)
         st.session_state.soil_dict = get_latest_soil_reading(st.session_state.soil_df, as_dict=True)
         st.session_state.soil_summary = get_latest_soil_reading(st.session_state.soil_df, as_dict=False)
-        st.toast("Updated with new 7-in-1 soil readings!", icon="🌱")
-        
-    s = st.session_state.soil_dict
-    sc1, sc2, sc3, sc4 = st.columns(4)
-    sc1.metric("Nitrogen (N)", f"{s['nitrogen']['value']} mg/kg", s['nitrogen']['status'])
-    sc2.metric("Phosphorus (P)", f"{s['phosphorus']['value']} mg/kg", s['phosphorus']['status'])
-    sc3.metric("Potassium (K)", f"{s['potassium']['value']} mg/kg", s['potassium']['status'])
-    sc4.metric("Soil pH", f"{s['ph']['value']}", s['ph']['status'])
-    
-    sc5, sc6, sc7 = st.columns(3)
-    sc5.metric("Volumetric Moisture", f"{s['moisture']['value']} %", s['moisture']['status'])
-    sc6.metric("Soil Temperature", f"{s['temperature']['value']} °C", s['temperature']['status'])
-    sc7.metric("Electrical Conductivity", f"{s['ec']['value']} mS/cm", s['ec']['status'])
-    
-    st.markdown("---")
-    st.markdown("#### 📈 24-Hour Soil Telemetry Trends")
-    chart_tab1, chart_tab2 = st.tabs(["NPK Nutrients (mg/kg)", "Moisture (%) & Soil Temp (°C)"])
-    
-    with chart_tab1:
-        chart_df_npk = st.session_state.soil_df.set_index("timestamp")[["nitrogen_mg_kg", "phosphorus_mg_kg", "potassium_mg_kg"]]
-        st.line_chart(chart_df_npk)
-        
-    with chart_tab2:
-        chart_df_env = st.session_state.soil_df.set_index("timestamp")[["moisture_pct", "temperature_c"]]
-        st.line_chart(chart_df_env)
+        st.rerun()
 
+# ----------------- CHAT CONVERSATION FEED -----------------
+chat_container = st.container()
 
-# ----------------- TAB 4: CHATBOT INTERFACE -----------------
-with tab_chat:
-    st.subheader(f"💬 Conversational Digital Agronomist ({language})")
-    
-    # Active context preview expander
-    with st.expander("🔍 View Live Context Injected into RAG Pipeline (Vision + Soil + Weather + ChromaDB)", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown("**📸 Vision State:**")
-            if st.session_state.vision_result:
-                st.code(st.session_state.vision_result["summary"], language="text")
-            else:
-                st.code("No image analyzed yet. General agronomy mode.", language="text")
-        with c2:
-            st.markdown("**🧪 Soil State:**")
-            st.code(st.session_state.soil_summary, language="text")
-        with c3:
-            st.markdown("**🌦️ Weather State:**")
-            st.code(st.session_state.weather_summary, language="text")
-
-    # Render Chat History
+with chat_container:
     for idx, msg in enumerate(st.session_state.chat_history):
         avatar = "🌾" if msg["role"] == "assistant" else "👨‍🌾"
         with st.chat_message(msg["role"], avatar=avatar):
+            if msg.get("attached_image") is not None:
+                st.image(msg["attached_image"], caption="Attached Crop Foliage", width=300)
+            
             st.markdown(msg["content"])
+            
             if msg.get("audio_bytes"):
                 st.audio(msg["audio_bytes"], format="audio/mp3")
+                
             if msg.get("engine"):
                 st.markdown(f"<span class='engine-tag'>⚡ Powered by: {msg['engine']}</span>", unsafe_allow_html=True)
 
-    # 🎙️ VOICE INPUT SECTION (Speech-to-Text)
-    st.markdown("---")
-    
-    # Voice Header with Re-record Button
-    vh_col1, vh_col2 = st.columns([3, 1])
-    with vh_col1:
-        st.markdown(f"#### 🎙️ Speak your question in {language}")
-    with vh_col2:
-        if st.button("🔄 Record Again / दोबारा बोलें", use_container_width=True, help="Clear current audio and record a new question"):
+# ----------------- DOWNSIDE ATTACHMENT & ACTION DOCK -----------------
+st.markdown("---")
+
+dock_tab1, dock_tab2, dock_tab3 = st.tabs([
+    "📎 Attach Image (Leaf / Crop Diagnosis)",
+    "🎙️ Voice Microphone (Speak in your language)",
+    "📄 Upload Custom Knowledge (PDF / TXT Manuals)"
+])
+
+# Dock Tab 1: Image Attachment
+staged_image = None
+with dock_tab1:
+    img_col1, img_col2 = st.columns([2, 1])
+    with img_col1:
+        uploaded_img = st.file_uploader("Upload leaf / plant image for disease detection", type=["jpg", "jpeg", "png"], key="dock_img_uploader")
+    with img_col2:
+        st.write("Or quick samples:")
+        sample_btns = st.columns(2)
+        use_diseased = sample_btns[0].button("🍃 Diseased Leaf", use_container_width=True)
+        use_healthy = sample_btns[1].button("🌿 Healthy Leaf", use_container_width=True)
+        
+    if uploaded_img is not None:
+        staged_image = Image.open(uploaded_img)
+    elif use_diseased and os.path.exists("sample_data/sample_diseased_leaf.jpg"):
+        staged_image = Image.open("sample_data/sample_diseased_leaf.jpg")
+    elif use_healthy and os.path.exists("sample_data/sample_healthy_leaf.jpg"):
+        staged_image = Image.open("sample_data/sample_healthy_leaf.jpg")
+        
+    if staged_image is not None:
+        st.image(staged_image, caption="Ready to analyze with question", width=180)
+        st.caption("✅ Image attached. Type your question below or click 'Analyze Image Now'.")
+        if st.button("🔍 Analyze Image & Diagnose Plant Health", type="primary"):
+            with st.spinner("Diagnosing foliage with Gemini Multimodal Vision & YOLO..."):
+                v_res = analyze_crop_image(staged_image, crop_type=crop_type)
+                diag = v_res["disease_diagnosis"]
+                st.session_state.active_vision_summary = v_res["summary"]
+                
+                # Formulate assistant diagnostic response
+                diag_msg = (
+                    f"### 🩺 Plant Pathology Assessment: **{diag['condition']}**\n\n"
+                    f"- **Severity:** `{diag['severity']}` (Confidence: {diag['confidence']*100:.1f}%)\n"
+                    f"- **Observed Symptoms:** {diag['symptoms']}\n"
+                    f"- **Recommended Field Action:** {diag['recommendation']}\n\n"
+                    f"*Diagnosed by: {diag.get('source', 'Vision Engine')}*"
+                )
+                
+                audio_bytes = None
+                if enable_tts:
+                    audio_bytes, _ = synthesize_speech(f"{diag['condition']}. {diag['recommendation']}", language=language)
+                    
+                st.session_state.chat_history.append({
+                    "role": "user",
+                    "content": f"Please diagnose this {crop_type} crop foliage photo.",
+                    "attached_image": staged_image,
+                    "audio_bytes": None,
+                    "engine": None
+                })
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": diag_msg,
+                    "attached_image": v_res.get("annotated_image"),
+                    "audio_bytes": audio_bytes,
+                    "engine": diag.get("source", "Gemini Vision")
+                })
+                st.rerun()
+
+# Dock Tab 2: Voice Input (Microphone with Re-record)
+voice_text_query = None
+with dock_tab2:
+    v_head1, v_head2 = st.columns([3, 1])
+    with v_head1:
+        st.markdown(f"**Speak your question in {language}**")
+    with v_head2:
+        if st.button("🔄 Record Again", use_container_width=True, help="Clear microphone and record a fresh question"):
             st.session_state.mic_key_idx += 1
-            st.session_state.file_audio_key_idx += 1
             st.rerun()
-    
-    voice_c1, voice_c2 = st.columns([1, 1])
-    with voice_c1:
-        audio_prompt = st.audio_input(
-            f"🎙️ Click microphone to record ({language})",
-            key=f"mic_audio_input_{st.session_state.mic_key_idx}"
-        )
-    with voice_c2:
-        audio_file_prompt = st.file_uploader(
-            "📁 Or upload audio note (.wav / .mp3 / .m4a)",
-            type=["wav", "mp3", "m4a", "ogg"],
-            key=f"file_audio_input_{st.session_state.file_audio_key_idx}"
-        )
-
-    # Handle Voice Input
-    voice_query = None
-    target_audio = audio_prompt or audio_file_prompt
-    if target_audio is not None:
-        with st.spinner(f"Transcribing voice using Gemini Flash & Whisper ({language})..."):
-            t_text, t_engine = transcribe_audio(target_audio, language=language)
-            if t_text and len(t_text.strip()) > 3:
-                voice_query = t_text
-                st.success(f"🗣️ **Voice Recognized ({t_engine}):** *\"{voice_query}\"*")
-                
-                # Small action button if user wants to discard this transcription and re-record
-                if st.button("❌ Not what you meant? Click here to re-record (दोबारा बोलें)", key="re_record_inline"):
-                    st.session_state.mic_key_idx += 1
-                    st.session_state.file_audio_key_idx += 1
-                    st.rerun()
-            else:
-                st.warning("No clear speech detected. Please click 'Record Again' and speak closer to your microphone.")
-
-    # Quick suggestion buttons
-    st.markdown("<small>💡 Quick Farmer Questions:</small>", unsafe_allow_html=True)
-    q_col1, q_col2, q_col3 = st.columns(3)
-    quick_q = None
-    if q_col1.button("🌾 धान (चावल) कब और कैसे उगाएं?", use_container_width=True):
-        quick_q = "धान (चावल) कब और कैसे उगाएं? नर्सरी से कटाई तक पूरी विधि बताएं।"
-    if q_col2.button("🌱 क्या मेरे खेत की मिट्टी स्वस्थ है?", use_container_width=True):
-        quick_q = "मेरी मिट्टी के NPK, pH और नमी के स्तर की जांच करके खाद की सलाह दें।"
-    if q_col3.button("🌦️ क्या आज कीटनाशक छिड़काव के लिए मौसम सही है?", use_container_width=True):
-        quick_q = "आज के मौसम, हवा और तापमान के अनुसार क्या कीटनाशक छिड़काव करना सुरक्षित है?"
-
-    # Text Input
-    user_prompt = st.chat_input("Or type your farming question here (e.g. चावल कब और कैसे उगाएं)...")
-    
-    # Clean query priority: Text input > Quick buttons > Voice query
-    # If the user typed text, always execute the typed text!
-    resolved_query = user_prompt or quick_q or voice_query
-    
-    if resolved_query:
-        # Check if already processed to prevent rerun loops
-        last_user_msg = None
-        for m in reversed(st.session_state.chat_history):
-            if m["role"] == "user":
-                last_user_msg = m["content"]
-                break
-                
-        if resolved_query != last_user_msg:
-            # Add user message to history
-            st.session_state.chat_history.append({"role": "user", "content": resolved_query, "audio_bytes": None})
-            with st.chat_message("user", avatar="👨‍🌾"):
-                st.markdown(resolved_query)
-                
-            # Prepare injected contexts
-            v_summary = st.session_state.vision_result["summary"] if st.session_state.vision_result else "No crop disease detected. Routine farm check."
-            s_summary = st.session_state.soil_summary
-            w_summary = st.session_state.weather_summary
             
-            with st.chat_message("assistant", avatar="🌾"):
-                with st.spinner("AgroSageGPT is generating your agronomic prescription..."):
-                    response_data = ask_agronomist(
-                        query=resolved_query,
-                        vision_summary=v_summary,
-                        soil_summary=s_summary,
-                        weather_summary=w_summary,
-                        language=language,
-                        chat_history=st.session_state.chat_history
-                    )
-                    answer_text = response_data["answer"]
-                    engine_used = response_data.get("engine", "AgroSage Engine")
-                    
-                    st.markdown(answer_text)
-                    
-                    # Generate High-Definition Neural Speech if enabled
-                    audio_bytes = None
-                    if enable_tts:
-                        with st.spinner(f"Synthesizing high-definition neural voice in {language}..."):
-                            audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=language)
-                            if audio_bytes:
-                                st.audio(audio_bytes, format="audio/mp3")
-                                st.caption(f"🔊 Spoken by: {tts_engine_name}")
-                    
-                    st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
-                    
-                    with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
-                        for idx, doc in enumerate(response_data.get("retrieved_context", [])):
-                            st.markdown(f"**Source Document Chunk {idx+1}:**")
-                            st.text(doc)
+    mic_audio = st.audio_input(
+        f"🎙️ Click to speak ({language})",
+        key=f"bottom_dock_mic_{st.session_state.mic_key_idx}"
+    )
+    if mic_audio is not None:
+        with st.spinner(f"Transcribing voice using Gemini Flash ASR ({language})..."):
+            t_text, t_engine = transcribe_audio(mic_audio, language=language)
+            if t_text and len(t_text.strip()) > 3:
+                voice_text_query = t_text
+                st.info(f"🗣️ **Voice Recognized:** *\"{voice_text_query}\"*")
+                if st.button("🚀 Ask Recognized Question", type="primary"):
+                    # Will trigger execution below
+                    pass
+
+# Dock Tab 3: Dynamic Knowledge Document Ingestion (PDF / TXT / MD)
+with dock_tab3:
+    st.markdown("**Upload Your Custom Agricultural Manuals, University Bulletins, or Seed Guides**")
+    st.caption("Documents uploaded here are dynamically parsed and indexed into ChromaDB vector store on the fly.")
+    uploaded_doc = st.file_uploader("Upload agricultural file (.pdf, .txt, .md)", type=["pdf", "txt", "md"], key="dynamic_rag_uploader")
+    if uploaded_doc is not None:
+        if uploaded_doc.name not in st.session_state.uploaded_doc_names:
+            with st.spinner(f"Extracting and indexing `{uploaded_doc.name}` into ChromaDB..."):
+                doc_bytes = uploaded_doc.read()
+                kb = get_knowledge_store()
+                num_chunks = kb.ingest_user_document(doc_bytes, uploaded_doc.name)
+                st.session_state.uploaded_doc_names.append(uploaded_doc.name)
+                st.success(f"✅ Successfully ingested **{num_chunks} knowledge chunks** from `{uploaded_doc.name}` into active RAG memory!")
+                st.caption("You can now ask questions directly about this document!")
+
+# Quick suggestion chips
+chip1, chip2, chip3 = st.columns(3)
+quick_chip_query = None
+if chip1.button("🌾 धान (चावल) कब और कैसे उगाएं?", use_container_width=True):
+    quick_chip_query = "धान (चावल) कब और कैसे उगाएं? नर्सरी से कटाई तक पूरी विधि बताएं।"
+if chip2.button("🌱 क्या मेरी मिट्टी में खाद की जरूरत है?", use_container_width=True):
+    quick_chip_query = "मेरी मिट्टी के NPK, pH और नमी के अनुसार कौन सी खाद देनी चाहिए?"
+if chip3.button("🌦️ क्या आज कीटनाशक छिड़काव के लिए मौसम सही है?", use_container_width=True):
+    quick_chip_query = "आज के मौसम, हवा और तापमान के अनुसार क्या कीटनाशक छिड़काव करना सुरक्षित है?"
+
+# Main Chat Input Box at Bottom
+user_text_input = st.chat_input("Type your farming question here (e.g. चावल कब और कैसे उगाएं)...")
+
+# Resolve Query Priority: Typed Text > Voice Query > Quick Suggestion Chips
+final_query = user_text_input or voice_text_query or quick_chip_query
+
+if final_query:
+    last_user_msg = None
+    for m in reversed(st.session_state.chat_history):
+        if m["role"] == "user":
+            last_user_msg = m["content"]
+            break
+            
+    if final_query != last_user_msg:
+        # Append User Message
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": final_query,
+            "attached_image": staged_image,
+            "audio_bytes": None,
+            "engine": None
+        })
+        
+        # Prepare context inputs
+        v_summary = st.session_state.active_vision_summary
+        s_summary = st.session_state.soil_summary
+        w_summary = st.session_state.weather_summary
+        
+        with st.chat_message("assistant", avatar="🌾"):
+            with st.spinner("AgroSageGPT is synthesizing your agronomic guidance..."):
+                response_data = ask_agronomist(
+                    query=final_query,
+                    vision_summary=v_summary,
+                    soil_summary=s_summary,
+                    weather_summary=w_summary,
+                    language=language,
+                    chat_history=st.session_state.chat_history
+                )
+                answer_text = response_data["answer"]
+                engine_used = response_data.get("engine", "AgroSage Engine")
+                
+                st.markdown(answer_text)
+                
+                # Synthesize High-Definition Neural Audio
+                audio_bytes = None
+                if enable_tts:
+                    with st.spinner(f"Synthesizing neural voice in {language}..."):
+                        audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=language)
+                        if audio_bytes:
+                            st.audio(audio_bytes, format="audio/mp3")
+                            st.caption(f"🔊 Spoken by: {tts_engine_name}")
                             
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": answer_text,
-                "engine": engine_used,
-                "audio_bytes": audio_bytes
-            })
+                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
+                
+                with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
+                    for idx, doc in enumerate(response_data.get("retrieved_context", [])):
+                        st.markdown(f"**Chunk {idx+1}:**")
+                        st.text(doc)
+                        
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": answer_text,
+            "attached_image": None,
+            "engine": engine_used,
+            "audio_bytes": audio_bytes
+        })
+        st.rerun()
