@@ -7,10 +7,60 @@ as high-speed fallback, and dynamic crop knowledge synthesis as offline fallback
 """
 
 import os
+import re
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def detect_language(text: str, fallback: str = "English") -> str:
+    """Detect whether user query is English, Hindi, Kannada, Telugu, or Tamil.
+    
+    Supports both native Indic scripts (Devanagari, Kannada, Telugu, Tamil)
+    and colloquial Romanized/Hinglish transcripts.
+    """
+    if not text or not str(text).strip():
+        return fallback
+        
+    s = str(text).strip()
+    
+    # 1. Native Indic Unicode Script ranges
+    if re.search(r"[\u0900-\u097F]", s):
+        return "Hindi"
+    if re.search(r"[\u0C80-\u0CFF]", s):
+        return "Kannada"
+    if re.search(r"[\u0C00-\u0C7F]", s):
+        return "Telugu"
+    if re.search(r"[\u0B80-\u0BFF]", s):
+        return "Tamil"
+        
+    # 2. Romanized keywords / phonetics
+    tokens = set(re.findall(r"[a-zA-Z]+", s.lower()))
+    
+    hi_keywords = {
+        "namaste", "kisan", "chawal", "gehu", "tamatar", "makka", "kheti", "fasal",
+        "paani", "pani", "kaise", "kab", "kya", "kyu", "kyun", "kare", "karein",
+        "ugaye", "ugayein", "rog", "keeda", "keede", "dawa", "dawai", "khad",
+        "upchar", "beej", "bimari", "bimaari", "lag", "gaya", "gayi", "hai", "hain",
+        "batao", "bataiye", "hoga", "hogi", "mitti", "khet"
+    }
+    if tokens & hi_keywords:
+        return "Hindi"
+        
+    kn_keywords = {"namaskara", "bhatta", "bele", "neeru", "roga", "hege", "yavaga", "manassu"}
+    if tokens & kn_keywords:
+        return "Kannada"
+        
+    te_keywords = {"namaskaram", "vari", "panta", "neellu", "cheeda", "ela", "eppudu", "mandhu"}
+    if tokens & te_keywords:
+        return "Telugu"
+        
+    ta_keywords = {"vanakkam", "nel", "payir", "thanneer", "noi", "eppadi", "eppozhuthu", "marunthu"}
+    if tokens & ta_keywords:
+        return "Tamil"
+        
+    return fallback
 
 
 class AgroKnowledgeStore:
@@ -263,11 +313,11 @@ def ask_agronomist(
             genai.configure(api_key=gemini_key)
             
             # Try active Gemini models in order of quota availability
-            for mod_name in ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.8-flash"]:
+            for mod_name in ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]:
                 try:
                     model = genai.GenerativeModel(mod_name)
                     full_prompt = f"{sys_prompt}\n\n{user_prompt}"
-                    res = model.generate_content(full_prompt)
+                    res = model.generate_content(full_prompt, request_options={"retry": None, "timeout": 8.0})
                     if res and res.text and len(res.text.strip()) > 30:
                         return {
                             "answer": res.text.strip(),
@@ -275,6 +325,9 @@ def ask_agronomist(
                             "engine": f"Google Gemini Flash ({mod_name})"
                         }
                 except Exception as mod_e:
+                    err_str = str(mod_e).lower()
+                    if "getaddrinfo" in err_str or "nameresolution" in err_str or "connection" in err_str:
+                        break
                     continue
         except Exception as e:
             print(f"[RAGEngine] Gemini issue: {e}. Switching to Groq Qwen...")

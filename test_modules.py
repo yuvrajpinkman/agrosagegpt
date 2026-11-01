@@ -65,8 +65,13 @@ def test_rag_engine():
     print("[4/4] Testing RAG Engine & ChromaDB Vector Store...")
     from src.rag_engine import ask_agronomist, get_knowledge_store
     
-    # 1. Test vector store retrieval
-    kb = get_knowledge_store()
+    # 0. Test dynamic language detection
+    from src.rag_engine import detect_language
+    assert detect_language("How to cultivate paddy crop?") == "English"
+    assert detect_language("चावल कब और कैसे उगाएं?") == "Hindi"
+    assert detect_language("chawal kab aur kaise ugaye") == "Hindi"
+    assert detect_language("ರೋಗ ನಿಯಂತ್ರಣ ಹೇಗೆ?") == "Kannada"
+    assert detect_language("నమస్కారం వరి సాగు ఎలా చేయాలి?") == "Telugu"
     retrieved = kb.query_knowledge("What is the remedy for leaf blight?", n_results=2)
     assert len(retrieved) > 0, "No documents retrieved from ChromaDB"
     

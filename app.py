@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from src.soil_mock import generate_soil_history, get_latest_soil_reading
 from src.weather_api import get_weather_data, format_weather_summary
 from src.vision_module import analyze_crop_image
-from src.rag_engine import ask_agronomist, get_knowledge_store
+from src.rag_engine import ask_agronomist, get_knowledge_store, detect_language
 from src.tts_engine import synthesize_speech
 from src.stt_engine import transcribe_audio
 
@@ -124,6 +124,9 @@ if "weather_data" not in st.session_state:
 if "active_vision_summary" not in st.session_state:
     st.session_state.active_vision_summary = "No crop disease detected. General field management."
 
+if "current_language" not in st.session_state:
+    st.session_state.current_language = "English"
+
 if "mic_key_idx" not in st.session_state:
     st.session_state.mic_key_idx = 0
 
@@ -134,15 +137,17 @@ if "uploaded_doc_names" not in st.session_state:
 with st.sidebar:
     st.markdown("### 🌾 Farm Configuration")
     
-    language = st.selectbox(
-        "🌐 Language / भाषा:",
-        ["Hindi", "English", "Kannada", "Telugu", "Tamil"],
-        index=0
+    language_mode = st.selectbox(
+        "🌐 Language Mode:",
+        ["Auto-Detect (Adaptive)", "English", "Hindi", "Kannada", "Telugu", "Tamil"],
+        index=0,
+        help="In Auto-Detect mode, AgroSageGPT dynamically adapts its replies and voice to match the language you speak or type."
     )
+    st.caption(f"Active Language: **{st.session_state.current_language}**")
     
     crop_type = st.selectbox(
         "🌱 Primary Crop:",
-        ["Rice / Paddy (धान)", "Wheat (गेहूं)", "Tomato (टमाटर)", "Maize / Corn (मक्का)", "Cotton (कपास)", "Chili (मिर्च)", "Potato (आलू)"],
+        ["Rice / Paddy", "Wheat", "Tomato", "Maize / Corn", "Cotton", "Chili", "Potato"],
         index=0
     )
     
@@ -274,7 +279,7 @@ with dock_tab1:
                 
                 audio_bytes = None
                 if enable_tts:
-                    audio_bytes, _ = synthesize_speech(f"{diag['condition']}. {diag['recommendation']}", language=language)
+                    audio_bytes, _ = synthesize_speech(f"{diag['condition']}. {diag['recommendation']}", language=st.session_state.current_language)
                     
                 st.session_state.chat_history.append({
                     "role": "user",
@@ -297,22 +302,24 @@ voice_text_query = None
 with dock_tab2:
     v_head1, v_head2 = st.columns([3, 1])
     with v_head1:
-        st.markdown(f"**Speak your question in {language}**")
+        st.markdown(f"**Speak your question (Auto-Adapts to language • Currently: `{st.session_state.current_language}`)**")
     with v_head2:
         if st.button("🔄 Record Again", use_container_width=True, help="Clear microphone and record a fresh question"):
             st.session_state.mic_key_idx += 1
             st.rerun()
             
     mic_audio = st.audio_input(
-        f"🎙️ Click to speak ({language})",
+        "🎙️ Click to speak (English, Hindi, Kannada, Telugu, Tamil...)",
         key=f"bottom_dock_mic_{st.session_state.mic_key_idx}"
     )
     if mic_audio is not None:
-        with st.spinner(f"Transcribing voice using Gemini Flash ASR ({language})..."):
-            t_text, t_engine = transcribe_audio(mic_audio, language=language)
+        with st.spinner("Transcribing voice and adapting language..."):
+            t_text, t_engine = transcribe_audio(mic_audio, language="Auto")
             if t_text and len(t_text.strip()) > 3:
                 voice_text_query = t_text
-                st.info(f"🗣️ **Voice Recognized:** *\"{voice_text_query}\"*")
+                if language_mode == "Auto-Detect (Adaptive)":
+                    st.session_state.current_language = detect_language(voice_text_query, fallback=st.session_state.current_language)
+                st.info(f"🗣️ **Voice Recognized ({st.session_state.current_language}):** *\"{voice_text_query}\"*")
                 if st.button("🚀 Ask Recognized Question", type="primary"):
                     # Will trigger execution below
                     pass
@@ -335,15 +342,15 @@ with dock_tab3:
 # Quick suggestion chips
 chip1, chip2, chip3 = st.columns(3)
 quick_chip_query = None
-if chip1.button("🌾 धान (चावल) कब और कैसे उगाएं?", use_container_width=True):
-    quick_chip_query = "धान (चावल) कब और कैसे उगाएं? नर्सरी से कटाई तक पूरी विधि बताएं।"
-if chip2.button("🌱 क्या मेरी मिट्टी में खाद की जरूरत है?", use_container_width=True):
-    quick_chip_query = "मेरी मिट्टी के NPK, pH और नमी के अनुसार कौन सी खाद देनी चाहिए?"
-if chip3.button("🌦️ क्या आज कीटनाशक छिड़काव के लिए मौसम सही है?", use_container_width=True):
-    quick_chip_query = "आज के मौसम, हवा और तापमान के अनुसार क्या कीटनाशक छिड़काव करना सुरक्षित है?"
+if chip1.button("🌾 When & how to cultivate Rice / Paddy?", use_container_width=True):
+    quick_chip_query = "When and how to cultivate Rice (Paddy)? Please provide a complete guide from nursery preparation to harvest."
+if chip2.button("🌱 Does my soil need fertilizer?", use_container_width=True):
+    quick_chip_query = "Based on my live soil NPK, pH, and moisture levels, what fertilizers should I apply?"
+if chip3.button("🌦️ Is the weather safe for pesticide spraying?", use_container_width=True):
+    quick_chip_query = "Considering current temperature, humidity, and wind conditions, is it safe to spray pesticides today?"
 
 # Main Chat Input Box at Bottom
-user_text_input = st.chat_input("Type your farming question here (e.g. चावल कब और कैसे उगाएं)...")
+user_text_input = st.chat_input("Type your farming question here (in English, Hindi, or any language)...")
 
 # Resolve Query Priority: Typed Text > Voice Query > Quick Suggestion Chips
 final_query = user_text_input or voice_text_query or quick_chip_query
@@ -356,6 +363,16 @@ if final_query:
             break
             
     if final_query != last_user_msg:
+        # Dynamic Language Adaptation
+        if language_mode == "Auto-Detect (Adaptive)":
+            active_language = detect_language(final_query, fallback=st.session_state.current_language)
+            st.session_state.current_language = active_language
+            lang_label = f"{active_language} (Auto-Detected)"
+        else:
+            active_language = language_mode
+            st.session_state.current_language = active_language
+            lang_label = active_language
+
         # Append User Message
         st.session_state.chat_history.append({
             "role": "user",
@@ -371,30 +388,31 @@ if final_query:
         w_summary = st.session_state.weather_summary
         
         with st.chat_message("assistant", avatar="🌾"):
-            with st.spinner("AgroSageGPT is synthesizing your agronomic guidance..."):
+            with st.spinner(f"AgroSageGPT is synthesizing your agronomic guidance ({active_language})..."):
                 response_data = ask_agronomist(
                     query=final_query,
                     vision_summary=v_summary,
                     soil_summary=s_summary,
                     weather_summary=w_summary,
-                    language=language,
+                    language=active_language,
                     chat_history=st.session_state.chat_history
                 )
                 answer_text = response_data["answer"]
                 engine_used = response_data.get("engine", "AgroSage Engine")
+                engine_display = f"{engine_used} • 🌐 {lang_label}"
                 
                 st.markdown(answer_text)
                 
                 # Synthesize High-Definition Neural Audio
                 audio_bytes = None
                 if enable_tts:
-                    with st.spinner(f"Synthesizing neural voice in {language}..."):
-                        audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=language)
+                    with st.spinner(f"Synthesizing neural voice in {active_language}..."):
+                        audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=active_language)
                         if audio_bytes:
                             st.audio(audio_bytes, format="audio/mp3")
-                            st.caption(f"🔊 Spoken by: {tts_engine_name}")
+                            st.caption(f"🔊 Spoken by: {tts_engine_name} ({active_language})")
                             
-                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_display}</span>", unsafe_allow_html=True)
                 
                 with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
                     for idx, doc in enumerate(response_data.get("retrieved_context", [])):
@@ -405,7 +423,7 @@ if final_query:
             "role": "assistant",
             "content": answer_text,
             "attached_image": None,
-            "engine": engine_used,
+            "engine": engine_display,
             "audio_bytes": audio_bytes
         })
         st.rerun()

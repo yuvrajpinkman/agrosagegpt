@@ -14,7 +14,7 @@ from src.audio_pipeline import process_noisy_field_audio
 
 def transcribe_audio(
     audio_data: Union[bytes, io.BytesIO, str],
-    language: str = "Hindi",
+    language: str = "Auto",
     filename: str = "voice_input.wav"
 ) -> Tuple[Optional[str], str]:
     """Transcribes and restores agricultural field voice query.

@@ -150,14 +150,14 @@ def restore_agricultural_lexicon(transcribed_text: str) -> str:
 # ==========================================
 # 4. MODEL-AGNOSTIC ASR ENGINE (GEMINI PRIMARY)
 # ==========================================
-def run_gemini_asr(audio_bytes: bytes, language: str = "Hindi") -> Optional[str]:
+def run_gemini_asr(audio_bytes: bytes, language: str = "Auto") -> Optional[str]:
     """Primary ASR: Google Gemini Flash Multimodal Audio transcription."""
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not gemini_key or gemini_key == "your_gemini_api_key_here":
         return None
 
-    # Test candidate active Gemini models (gemini-3.5-flash, gemini-3-flash-preview, gemini-3.6-flash)
-    candidate_models = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.8-flash"]
+    # Test candidate active Gemini models with priority on responsive models
+    candidate_models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]
     
     try:
         import google.generativeai as genai
@@ -166,8 +166,13 @@ def run_gemini_asr(audio_bytes: bytes, language: str = "Hindi") -> Optional[str]
         # Detect audio mime type
         mime = "audio/wav" if audio_bytes[:4] == b"RIFF" else "audio/mp3"
         
+        if language and language.lower() not in ["auto", "auto-detect"]:
+            lang_clause = f"into {language}"
+        else:
+            lang_clause = "in whatever language the speaker is speaking (English, Hindi, Kannada, Telugu, Tamil, or Hinglish)"
+
         prompt = f"""You are a specialized agricultural Speech-to-Text (ASR) transcription engine.
-Transcribe this farmer's spoken audio verbatim into {language}.
+Transcribe this farmer's spoken audio verbatim {lang_clause}.
 Preserve technical agricultural terms (crops, fertilizers, NPK, pesticides, fungal diseases) accurately without translating or corrupting them.
 Return ONLY the transcribed sentence, with no surrounding quotes or explanations."""
 
@@ -177,11 +182,13 @@ Return ONLY the transcribed sentence, with no surrounding quotes or explanations
                 res = model.generate_content([
                     prompt,
                     {"mime_type": mime, "data": audio_bytes}
-                ])
+                ], request_options={"retry": None, "timeout": 8.0})
                 if res and res.text and len(res.text.strip()) > 2:
                     return res.text.strip()
             except Exception as mod_err:
-                # Quota or rate limit on specific model; try next candidate
+                err_str = str(mod_err).lower()
+                if "getaddrinfo" in err_str or "nameresolution" in err_str or "connection" in err_str:
+                    break
                 continue
     except Exception as e:
         print(f"[AudioPipeline] Gemini ASR error: {e}")
@@ -223,7 +230,7 @@ def run_groq_whisper_asr(audio_bytes: bytes, language: str = "Hindi") -> Optiona
 # ==========================================
 def process_noisy_field_audio(
     audio_data,
-    language: str = "Hindi"
+    language: str = "Auto"
 ) -> Tuple[Optional[str], Dict[str, Any]]:
     """Executes the full pipeline:
     Noisy Audio -> SNR check -> Filter -> ASR (Gemini Primary / Whisper Failover) -> Lexicon Restoration.
