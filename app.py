@@ -251,18 +251,25 @@ with dock_tab1:
         st.image(staged_image, caption="Ready to analyze with question", width=180)
         st.caption("✅ Image attached. Type your question below or click 'Analyze Image Now'.")
         if st.button("🔍 Analyze Image & Diagnose Plant Health", type="primary"):
-            with st.spinner("Diagnosing foliage with Gemini Multimodal Vision & YOLO..."):
+            with st.spinner("Diagnosing foliage with Hugging Face Meta DINOv2 & Gemini Validator..."):
                 v_res = analyze_crop_image(staged_image, crop_type=crop_type)
                 diag = v_res["disease_diagnosis"]
                 st.session_state.active_vision_summary = v_res["summary"]
                 
-                # Formulate assistant diagnostic response
+                # Formulate assistant diagnostic response with validation telemetry
+                val_telemetry = ""
+                if "hf_prediction" in diag:
+                    val_telemetry += f"- **🤖 Local Model (HF DINOv2):** `{diag['hf_prediction']}`\n"
+                if "validator_verdict" in diag and diag["validator_verdict"]:
+                    val_telemetry += f"- **🛡️ Gemini Multimodal Validator:** `{diag['validator_verdict']}` — *{diag.get('validation_notes', '')}*\n"
+                
                 diag_msg = (
                     f"### 🩺 Plant Pathology Assessment: **{diag['condition']}**\n\n"
+                    f"{val_telemetry}"
                     f"- **Severity:** `{diag['severity']}` (Confidence: {diag['confidence']*100:.1f}%)\n"
                     f"- **Observed Symptoms:** {diag['symptoms']}\n"
                     f"- **Recommended Field Action:** {diag['recommendation']}\n\n"
-                    f"*Diagnosed by: {diag.get('source', 'Vision Engine')}*"
+                    f"*Engine Pipeline: {diag.get('source', 'Vision Engine')}*"
                 )
                 
                 audio_bytes = None
