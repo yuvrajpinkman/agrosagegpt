@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .env
 .chroma/
+.chroma_db/
 *.pt
