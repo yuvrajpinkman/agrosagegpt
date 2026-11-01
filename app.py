@@ -97,6 +97,12 @@ if "vision_result" not in st.session_state:
 if "vision_audio" not in st.session_state:
     st.session_state.vision_audio = None
 
+if "mic_key_idx" not in st.session_state:
+    st.session_state.mic_key_idx = 0
+
+if "file_audio_key_idx" not in st.session_state:
+    st.session_state.file_audio_key_idx = 0
+
 # Sidebar Configuration
 with st.sidebar:
     st.markdown("### 🌾 AgroSage Settings")
@@ -320,25 +326,47 @@ with tab_chat:
 
     # 🎙️ VOICE INPUT SECTION (Speech-to-Text)
     st.markdown("---")
-    st.markdown(f"#### 🎙️ Speak your question in {language}")
+    
+    # Voice Header with Re-record Button
+    vh_col1, vh_col2 = st.columns([3, 1])
+    with vh_col1:
+        st.markdown(f"#### 🎙️ Speak your question in {language}")
+    with vh_col2:
+        if st.button("🔄 Record Again / दोबारा बोलें", use_container_width=True, help="Clear current audio and record a new question"):
+            st.session_state.mic_key_idx += 1
+            st.session_state.file_audio_key_idx += 1
+            st.rerun()
     
     voice_c1, voice_c2 = st.columns([1, 1])
     with voice_c1:
-        audio_prompt = st.audio_input(f"🎙️ Click microphone to record question ({language})", key="mic_audio_input")
+        audio_prompt = st.audio_input(
+            f"🎙️ Click microphone to record ({language})",
+            key=f"mic_audio_input_{st.session_state.mic_key_idx}"
+        )
     with voice_c2:
-        audio_file_prompt = st.file_uploader("📁 Or upload audio note (.wav / .mp3 / .m4a)", type=["wav", "mp3", "m4a", "ogg"], key="file_audio_input")
+        audio_file_prompt = st.file_uploader(
+            "📁 Or upload audio note (.wav / .mp3 / .m4a)",
+            type=["wav", "mp3", "m4a", "ogg"],
+            key=f"file_audio_input_{st.session_state.file_audio_key_idx}"
+        )
 
     # Handle Voice Input
     voice_query = None
     target_audio = audio_prompt or audio_file_prompt
     if target_audio is not None:
-        with st.spinner(f"Transcribing voice using Whisper-Large-v3 ({language})..."):
+        with st.spinner(f"Transcribing voice using Gemini Flash & Whisper ({language})..."):
             t_text, t_engine = transcribe_audio(target_audio, language=language)
             if t_text and len(t_text.strip()) > 3:
                 voice_query = t_text
                 st.success(f"🗣️ **Voice Recognized ({t_engine}):** *\"{voice_query}\"*")
+                
+                # Small action button if user wants to discard this transcription and re-record
+                if st.button("❌ Not what you meant? Click here to re-record (दोबारा बोलें)", key="re_record_inline"):
+                    st.session_state.mic_key_idx += 1
+                    st.session_state.file_audio_key_idx += 1
+                    st.rerun()
             else:
-                st.warning("No clear speech detected. Please speak closer to your microphone or type below.")
+                st.warning("No clear speech detected. Please click 'Record Again' and speak closer to your microphone.")
 
     # Quick suggestion buttons
     st.markdown("<small>💡 Quick Farmer Questions:</small>", unsafe_allow_html=True)
