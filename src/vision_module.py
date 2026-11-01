@@ -42,7 +42,6 @@ def _diagnose_with_gemini(pil_img: Image.Image, crop_type: str) -> Optional[Dict
     try:
         import google.generativeai as genai
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-3.8-flash")
         
         prompt = f"""You are a professional plant pathologist and agricultural diagnostician.
 Analyze this image of a {crop_type} crop foliage carefully.
@@ -62,16 +61,20 @@ Respond ONLY with a valid JSON object in this exact format (no markdown fences, 
   "recommendation": "Precise agronomic recommendation including chemical/biological dosage or cultural control"
 }}"""
 
-        response = model.generate_content([prompt, pil_img])
-        text = response.text.strip()
-        
-        # Clean potential markdown backticks
-        clean_json = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
-        clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
-        
-        data = json.loads(clean_json)
-        data["source"] = "Gemini 3.8 Flash Multimodal Vision"
-        return data
+        for mod_name in ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.8-flash"]:
+            try:
+                model = genai.GenerativeModel(mod_name)
+                response = model.generate_content([prompt, pil_img])
+                text = response.text.strip()
+                
+                clean_json = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+                clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
+                
+                data = json.loads(clean_json)
+                data["source"] = f"Google Gemini Vision ({mod_name})"
+                return data
+            except Exception:
+                continue
     except Exception as e:
         print(f"[VisionModule] Gemini Vision fallback triggered: {e}")
         return None

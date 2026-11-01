@@ -192,21 +192,27 @@ def ask_agronomist(
         f"Please provide your complete, practical agricultural response in {language}."
     )
 
-    # 1. PRIMARY: Google Gemini 3.8 Flash
+    # 1. PRIMARY: Google Gemini Flash
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     if gemini_key and gemini_key != "your_gemini_api_key_here":
         try:
             import google.generativeai as genai
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-3.8-flash")
-            full_prompt = f"{sys_prompt}\n\n{user_prompt}"
-            res = model.generate_content(full_prompt)
-            if res and res.text and len(res.text.strip()) > 30:
-                return {
-                    "answer": res.text.strip(),
-                    "retrieved_context": retrieved_docs,
-                    "engine": "Google Gemini 3.8 Flash (Live Multilingual Model)"
-                }
+            
+            # Try active Gemini models in order of quota availability
+            for mod_name in ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.8-flash"]:
+                try:
+                    model = genai.GenerativeModel(mod_name)
+                    full_prompt = f"{sys_prompt}\n\n{user_prompt}"
+                    res = model.generate_content(full_prompt)
+                    if res and res.text and len(res.text.strip()) > 30:
+                        return {
+                            "answer": res.text.strip(),
+                            "retrieved_context": retrieved_docs,
+                            "engine": f"Google Gemini Flash ({mod_name})"
+                        }
+                except Exception as mod_e:
+                    continue
         except Exception as e:
             print(f"[RAGEngine] Gemini issue: {e}. Switching to Groq Qwen...")
 
@@ -223,7 +229,7 @@ def ask_agronomist(
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1200
+                max_tokens=650
             )
             answer_text = response.choices[0].message.content.strip()
             if answer_text and len(answer_text) > 30:
