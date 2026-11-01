@@ -2,7 +2,8 @@
 
 Integrates ChromaDB vector store with agronomic knowledge, conversational context,
 Computer Vision diagnostics, IoT soil telemetry, and live weather conditions.
-Provides multilingual, farmer-friendly advisories using LangChain and generative models.
+Uses Google Gemini 3.8 Flash as the primary multilingual LLM, Groq (openai/gpt-oss-120b)
+as high-speed fallback, and local knowledge synthesis as offline fallback.
 """
 
 import os
@@ -24,7 +25,6 @@ class AgroKnowledgeStore:
     def _init_store(self):
         """Initialize ChromaDB collection and ingest knowledge document."""
         import chromadb
-        from chromadb.config import Settings
         
         os.makedirs(self.persist_dir, exist_ok=True)
         self.client = chromadb.PersistentClient(path=self.persist_dir)
@@ -34,7 +34,7 @@ class AgroKnowledgeStore:
             name="agricultural_advisory_kb"
         )
         
-        # Check if already populated
+        # Ingest if collection is empty
         if self.collection.count() == 0 and os.path.exists(self.doc_path):
             self._ingest_file(self.doc_path)
             
@@ -52,7 +52,6 @@ class AgroKnowledgeStore:
             
             doc_idx = 0
             for sec in sections:
-                # Sub-split by subsections
                 subsections = [sub.strip() for sub in sec.split("### ") if sub.strip()]
                 for sub in subsections:
                     lines = sub.split("\n", 1)
@@ -119,8 +118,8 @@ Advisory Structure:
 
 Tone Guidelines:
 - Farmer-friendly, respectful, actionable, and encouraging.
-- Avoid overly academic jargon; translate values into actionable advice.
-- When answering in Indian languages (Hindi, Kannada, Telugu, Tamil, etc.), use natural, accessible vocabulary.
+- Avoid overly academic jargon; translate numerical values into practical advice (e.g., dosage per 15L backpack knapsack sprayer).
+- IMPORTANT: Reply entirely in {language} so the farmer can understand effortlessly.
 """
 
 
@@ -132,10 +131,9 @@ def _generate_synthetic_multilingual_response(
     retrieved_context: str,
     language: str = "English"
 ) -> str:
-    """Provides a high-quality agronomic response when an external LLM key is absent."""
+    """Provides a high-quality agronomic response when external LLM keys are offline."""
     lang_lower = language.lower()
     
-    # Multilingual greeting & headings
     headings = {
         "hindi": {
             "title": "🌾 एग्रोसेजजीपीटी (AgroSageGPT) - डिजिटल कृषि परामर्श",
@@ -199,65 +197,7 @@ def _generate_synthetic_multilingual_response(
 
 *नोट: यह परामर्श आपकी लाइव मिट्टी, मौसम और दृष्टि सेंसर डेटा पर आधारित है।*
 """
-    elif lang_lower == "kannada":
-        return f"""### {chosen_h['title']}
-**ನಮಸ್ಕಾರ ರೈತ ಬಾಂಧವರೇ! ನಿಮ್ಮ ಬೆಳೆ ಮತ್ತು ಮಣ್ಣಿನ ವಿವರವಾದ ವಿಶ್ಲೇಷಣೆ ಇಲ್ಲಿದೆ:**
-
-#### {chosen_h['diag']}
-- {vision_summary.replace(chr(10), ' ')}
-- ಎಲೆಗಳ ಮೇಲಿನ ರೋಗ ಲಕ್ಷಣಗಳಿಗೆ ತಕ್ಷಣದ ಚಿಕಿತ್ಸೆ ಅಗತ್ಯವಿದೆ.
-
-#### {chosen_h['soil']}
-- {soil_summary.replace(chr(10), ' ')}
-- ಪೋಷಕಾಂಶಗಳ ಸಮತೋಲನ ಕಾಪಾಡಲು ಸಾವಯವ ಗೊಬ್ಬರ ಮತ್ತು ಎನ್‌ಪಿಕೆ ಪ್ರಮಾಣ ನಿಯಂತ್ರಿಸಿ.
-
-#### {chosen_h['weather']}
-- {weather_summary.replace(chr(10), ' ')}
-- ತೇವಾಂಶ ಮತ್ತು ಗಾಳಿಯ ವೇಗವನ್ನು ಗಮನಿಸಿ ಕೀಟನಾಶಕ ಸಿಂಪಡಿಸಿ.
-
-#### {chosen_h['plan']}
-1. **ಹಾನಿಗೊಳಗಾದ ಎಲೆಗಳನ್ನು ತೆಗೆಯಿರಿ**: ರೋಗ ಹರಡದಂತೆ ಸೋಂಕಿತ ಎಲೆಗಳನ್ನು ಕಿತ್ತು ನಾಶಪಡಿಸಿ.
-2. **ಶಿಲೀಂಧ್ರನಾಶಕ ಸಿಂಪಡಣೆ**: ಟ್ರೈಕೋಡರ್ಮಾ ಅಥವಾ ಶಿಫಾರಸು ಮಾಡಿದ ಜೈವಿಕ ಸಿಂಪಡಣೆ ಮಾಡಿ.
-3. **ಹನಿ ನೀರಾವರಿ ಪಾಲನೆ**: ಮಣ್ಣಿನ ತೇವಾಂಶಕ್ಕೆ ಅನುಗುಣವಾಗಿ ನೀರು ಹಾಯಿಸಿ.
-"""
-    elif lang_lower == "telugu":
-        return f"""### {chosen_h['title']}
-**రైతు సోదరులకు నమస్కారం! మీ క్షేత్ర సమాచారం ఆధారంగా సమగ్ర విశ్లేషణ:**
-
-#### {chosen_h['diag']}
-- {vision_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['soil']}
-- {soil_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['weather']}
-- {weather_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['plan']}
-1. **వ్యాధి సోకిన ఆకులను తొలగించండి**: తెగులు వ్యాపించకుండా జాగ్రత్త వహించండి.
-2. **సహజ నివారణ మందుల పిచికారీ**: ట్రైకోడెర్మా లేదా కాపర్ ఆక్సిక్లోరైడ్ పిచికారీ చేయండి.
-3. **నీటి యాజమాన్యం**: తేమ శాతాన్ని బట్టి డ్రిప్ ద్వారా నీటిని అందించండి.
-"""
-    elif lang_lower == "tamil":
-        return f"""### {chosen_h['title']}
-**வணக்கம் விவசாய பெருமக்களே! உங்கள் பயிர் நிலவரத்தின் ஒருங்கிணைந்த வழிகாட்டுதல்:**
-
-#### {chosen_h['diag']}
-- {vision_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['soil']}
-- {soil_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['weather']}
-- {weather_summary.replace(chr(10), ' ')}
-
-#### {chosen_h['plan']}
-1. **பாதிக்கப்பட்ட இலைகளை அகற்றுங்கள்**: நோய் மற்ற பயிர்களுக்கு பரவாமல் தடுக்கவும்.
-2. **இயற்கை அல்லது பரிந்துரைக்கப்பட்ட பூஞ்சாணக்கொல்லி**: மாலை வேளையில் தெளிக்கவும்.
-3. **சமச்சீர் பாசனம்**: மண்ணின் ஈரப்பதத்திற்கு ஏற்ப சொட்டு நீர் பாசனம் செய்யவும்.
-"""
     else:
-        # Default English
         return f"""### {chosen_h['title']}
 **Hello Farmer! Here is your tailored cross-domain agronomic prescription:**
 
@@ -277,8 +217,6 @@ def _generate_synthetic_multilingual_response(
 1. **Canopy Sanitization & Pruning**: Remove visibly spotted or chlorotic foliage to arrest spore dispersion and improve internal air circulation.
 2. **Nutrient & Soil Balancing**: Align nitrogen and phosphorus application with your soil sensor test; ensure pH remains buffered between 6.0 and 7.0 for optimal micronutrient uptake.
 3. **Precision Spray Timing**: Conduct any required biological (Trichoderma harzianum) or preventative copper spray in the calm early morning or late afternoon to prevent evaporative drift and scorch.
-
-*Telemetry Sources: Live IoT telemetry stream, Ultralytics YOLOv8 crop vision, local weather station, and AgroSage Knowledge Base.*
 """
 
 
@@ -292,6 +230,11 @@ def ask_agronomist(
 ) -> Dict[str, Any]:
     """Execute RAG pipeline combining Vision, IoT, Weather, and Vector DB.
     
+    Tiers:
+    1. Primary: Google Gemini 3.8 Flash (Multilingual & High-Fidelity)
+    2. Fallback: Groq openai/gpt-oss-120b (High-Speed LLM inference)
+    3. Offline: Local Agronomic Rule-based Synthesizer
+    
     Args:
         query: User farmer query / question.
         vision_summary: Output summary from Vision module.
@@ -301,7 +244,7 @@ def ask_agronomist(
         chat_history: Previous turn messages.
         
     Returns:
-        dict: response text, retrieved context documents, and metadata.
+        dict: response text, retrieved context documents, and metadata engine name.
     """
     kb = get_knowledge_store()
     
@@ -310,61 +253,59 @@ def ask_agronomist(
     retrieved_docs = kb.query_knowledge(search_query, n_results=2)
     context_str = "\n\n".join(retrieved_docs)
     
-    llm_api_key = os.getenv("LLM_API_KEY", "").strip()
-    
-    # If a valid external API key is provided, attempt live LLM call
-    if llm_api_key and llm_api_key != "your_llm_api_key_here":
+    sys_prompt = AGRONOMIST_SYSTEM_PROMPT.format(language=language)
+    user_prompt = (
+        f"Agronomic Reference Documents from Local Vector DB:\n{context_str}\n\n"
+        f"Current Crop Diagnostics:\n{vision_summary}\n\n"
+        f"Current Soil Sensor Telemetry:\n{soil_summary}\n\n"
+        f"Live Local Weather Conditions:\n{weather_summary}\n\n"
+        f"Farmer Query: {query}\n"
+        f"Please provide your actionable, compassionate response in {language}."
+    )
+
+    # 1. PRIMARY: Try Gemini 3.8 Flash
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if gemini_key and gemini_key != "your_gemini_api_key_here":
         try:
-            # Check OpenAI or Google key format
-            if llm_api_key.startswith("AIza"):
-                import google.generativeai as genai
-                genai.configure(api_key=llm_api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                
-                full_prompt = (
-                    f"{AGRONOMIST_SYSTEM_PROMPT.format(language=language)}\n\n"
-                    f"Agronomic Knowledge Context:\n{context_str}\n\n"
-                    f"Vision Diagnostic:\n{vision_summary}\n\n"
-                    f"Soil Telemetry:\n{soil_summary}\n\n"
-                    f"Weather Telemetry:\n{weather_summary}\n\n"
-                    f"Farmer's Question: {query}\n"
-                    f"Please provide your response in {language}."
-                )
-                res = model.generate_content(full_prompt)
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-3.8-flash")
+            full_prompt = f"{sys_prompt}\n\n{user_prompt}"
+            res = model.generate_content(full_prompt)
+            if res and res.text:
                 return {
                     "answer": res.text,
                     "retrieved_context": retrieved_docs,
-                    "engine": "Google Gemini (Live API)"
-                }
-            else:
-                from openai import OpenAI
-                client = OpenAI(api_key=llm_api_key)
-                system_content = AGRONOMIST_SYSTEM_PROMPT.format(language=language)
-                user_content = (
-                    f"Agronomic Reference Documents:\n{context_str}\n\n"
-                    f"{vision_summary}\n\n"
-                    f"{soil_summary}\n\n"
-                    f"{weather_summary}\n\n"
-                    f"Farmer Query: {query}\n"
-                    f"Please respond thoroughly in {language}."
-                )
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_content},
-                        {"role": "user", "content": user_content}
-                    ],
-                    temperature=0.3
-                )
-                return {
-                    "answer": response.choices[0].message.content,
-                    "retrieved_context": retrieved_docs,
-                    "engine": "OpenAI GPT (Live API)"
+                    "engine": "Google Gemini 3.8 Flash (Live Multilingual Model)"
                 }
         except Exception as e:
-            print(f"[RAGEngine] Live LLM error, falling back to local synthesizer: {e}")
+            print(f"[RAGEngine] Gemini 3.8 Flash issue: {e}. Switching to Groq fallback.")
 
-    # Fallback to local contextual Agronomist Synthesizer
+    # 2. SECONDARY: Try Groq High-Speed LLM Fallback
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    if groq_key and groq_key != "your_groq_api_key_here":
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_key)
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1024
+            )
+            answer_text = response.choices[0].message.content
+            return {
+                "answer": answer_text,
+                "retrieved_context": retrieved_docs,
+                "engine": "Groq (High-Speed LLM Fallback)"
+            }
+        except Exception as e:
+            print(f"[RAGEngine] Groq issue: {e}. Switching to offline synthesizer.")
+
+    # 3. TERTIARY: Offline Self-Contained Fallback
     answer = _generate_synthetic_multilingual_response(
         query=query,
         vision_summary=vision_summary,
@@ -377,5 +318,5 @@ def ask_agronomist(
     return {
         "answer": answer,
         "retrieved_context": retrieved_docs,
-        "engine": "AgroSage Unified Agronomist Engine (Self-Contained Fallback & RAG)"
+        "engine": "AgroSage Offline Rule Synthesizer (Zero-Network Fallback)"
     }

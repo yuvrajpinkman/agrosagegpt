@@ -8,3 +8,5 @@ opencv-python
 pandas
 python-dotenv
 requests
+google-generativeai
+groq

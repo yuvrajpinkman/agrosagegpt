@@ -56,6 +56,15 @@ st.markdown("""
     .badge-optimal { background-color: #c8e6c9; color: #2e7d32; }
     .badge-warning { background-color: #fff9c4; color: #f57f17; }
     .badge-alert { background-color: #ffcdd2; color: #c62828; }
+    .engine-tag {
+        font-size: 0.78rem;
+        color: #555;
+        background: #f0f4f8;
+        padding: 2px 8px;
+        border-radius: 6px;
+        display: inline-block;
+        margin-top: 6px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +73,8 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         {
             "role": "assistant",
-            "content": "Namaste! I am **AgroSageGPT**, your Digital Agronomist. Upload a crop photo, inspect your live soil/weather telemetry, or ask me any question about crop health, fertilizer dosing, and pest management in your language."
+            "content": "Namaste! I am **AgroSageGPT**, your Digital Agronomist. Upload a crop photo, inspect your live soil/weather telemetry, or ask me any question about crop health, fertilizer dosing, and pest management in your language.",
+            "engine": "AgroSage Welcome Agent"
         }
     ]
 
@@ -107,21 +117,41 @@ with st.sidebar:
         st.toast(f"Weather synced for {city_input}!", icon="🌤️")
 
     st.markdown("---")
-    st.markdown("### ⚙️ System Telemetry")
-    st.success("✅ Ultralytics YOLOv8 Loaded")
-    st.success("✅ ChromaDB RAG Vector Store Active")
-    st.success("✅ 7-in-1 IoT Soil Telemetry Online")
+    st.markdown("### ⚙️ Production Telemetry & APIs")
+    
+    ow_key = os.getenv("OPENWEATHER_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+
+    if ow_key and ow_key != "your_openweather_api_key_here":
+        st.success("🟢 OpenWeatherMap Live API Connected")
+    else:
+        st.warning("🟡 OpenWeatherMap (Simulated)")
+
+    if gemini_key and gemini_key != "your_gemini_api_key_here":
+        st.success("🟢 Gemini 3.8 Flash (Multimodal & RAG)")
+    else:
+        st.warning("🟡 Gemini (Offline)")
+
+    if groq_key and groq_key != "your_groq_api_key_here":
+        st.success("🟢 Groq (High-Speed Fallback)")
+    else:
+        st.warning("🟡 Groq (Offline)")
+
+    st.success("🟢 Ultralytics YOLOv8 Loaded")
+    st.success("🟢 ChromaDB Vector Store Active")
+    st.success("🟢 7-in-1 IoT Soil Telemetry Online")
     
     st.markdown("---")
     if st.button("🧹 Clear Chat History", use_container_width=True):
         st.session_state.chat_history = [
-            {"role": "assistant", "content": "Chat history cleared. How can I assist you with your farm today?"}
+            {"role": "assistant", "content": "Chat history cleared. How can I assist you with your farm today?", "engine": "AgroSage Reset"}
         ]
         st.rerun()
 
 # Header
 st.markdown('<div class="main-header">🌱 AgroSageGPT: Multilingual Digital Agronomist</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Unified Generative AI & RAG Platform combining Computer Vision, IoT Soil Analytics, and Agro-Meteorology</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Production-Ready AI Platform combining Gemini Multimodal Vision, IoT Soil Analytics, Live Meteorology, and ChromaDB RAG</div>', unsafe_allow_html=True)
 
 # Tabs
 tab_vision, tab_weather, tab_soil, tab_chat = st.tabs([
@@ -133,8 +163,8 @@ tab_vision, tab_weather, tab_soil, tab_chat = st.tabs([
 
 # ----------------- TAB 1: VISION MODULE -----------------
 with tab_vision:
-    st.subheader("📸 Crop & Leaf Lesion Diagnostic (Ultralytics YOLOv8)")
-    st.caption("Upload a photo of your crop foliage or select a sample image to diagnose diseases, pests, and nutrient chlorosis.")
+    st.subheader("📸 Crop & Leaf Pathology Diagnostic (Gemini Multimodal + YOLOv8)")
+    st.caption("Upload a foliage photo or select a test sample. Evaluated directly by Gemini 3.8 Flash Vision for accurate disease identification, with spatial YOLO bounding boxes.")
     
     col_v1, col_v2 = st.columns([1, 1])
     
@@ -157,7 +187,7 @@ with tab_vision:
         if target_img is not None:
             st.image(target_img, caption="Input Crop Foliage", use_container_width=True)
             if st.button("🔍 Run Computer Vision Diagnostic", type="primary", use_container_width=True):
-                with st.spinner("Analyzing image features with YOLOv8..."):
+                with st.spinner("Analyzing foliage with Gemini 3.8 Flash Multimodal Vision & YOLOv8..."):
                     res = analyze_crop_image(target_img, crop_type=crop_type)
                     st.session_state.vision_result = res
                     st.success("Diagnosis Complete!")
@@ -165,17 +195,18 @@ with tab_vision:
     with col_v2:
         if st.session_state.vision_result is not None:
             v_res = st.session_state.vision_result
-            st.image(v_res["annotated_image"], caption="YOLOv8 Object & Lesion Localization", use_container_width=True)
+            st.image(v_res["annotated_image"], caption="YOLOv8 Spatial Localization & Bounding Boxes", use_container_width=True)
             
             diag = v_res["disease_diagnosis"]
-            severity_color = "badge-alert" if "High" in diag["severity"] else ("badge-warning" if "Mild" in diag["severity"] else "badge-optimal")
+            severity_color = "badge-alert" if "High" in diag["severity"] else ("badge-warning" if "Moderate" in diag["severity"] or "Mild" in diag["severity"] else "badge-optimal")
             
             st.markdown(f"### Assessment: **{diag['condition']}**")
             st.markdown(f"**Confidence:** `{diag['confidence'] * 100:.1f}%` | **Severity:** <span class='status-badge {severity_color}'>{diag['severity']}</span>", unsafe_allow_html=True)
+            st.caption(f"🔬 Diagnosed by: **{diag.get('source', 'Vision Engine')}**")
             st.info(f"**Symptoms:** {diag['symptoms']}")
             st.warning(f"**Recommended Field Action:** {diag['recommendation']}")
         else:
-            st.info("Upload or select an image on the left and click **'Run Computer Vision Diagnostic'** to view the lesion segmentation and classification report.")
+            st.info("Upload or select an image on the left and click **'Run Computer Vision Diagnostic'** to view the multimodal pathology and classification report.")
 
 
 # ----------------- TAB 2: WEATHER MODULE -----------------
@@ -198,7 +229,7 @@ with tab_weather:
 # ----------------- TAB 3: SOIL IOT MODULE -----------------
 with tab_soil:
     st.subheader("🧪 7-in-1 IoT Soil Sensor Telemetry")
-    st.caption("Live edge telemetry streaming: Nitrogen (N), Phosphorus (P), Potassium (K), pH, Moisture, Temperature, EC.")
+    st.caption("Edge telemetry streaming: Nitrogen (N), Phosphorus (P), Potassium (K), pH, Moisture, Temperature, EC.")
     
     if st.button("📡 Simulate New Soil Sensor Telemetry Reading", type="secondary"):
         st.session_state.soil_df = generate_soil_history(hours=24)
@@ -236,7 +267,7 @@ with tab_chat:
     st.subheader(f"💬 Conversational Digital Agronomist ({language})")
     
     # Active context preview expander
-    with st.expander("🔍 View Context Injected into RAG Pipeline (Vision + Soil + Weather + ChromaDB)", expanded=False):
+    with st.expander("🔍 View Live Context Injected into RAG Pipeline (Vision + Soil + Weather + ChromaDB)", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             st.markdown("**📸 Vision State:**")
@@ -256,6 +287,8 @@ with tab_chat:
         avatar = "🌾" if msg["role"] == "assistant" else "👨‍🌾"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+            if msg.get("engine"):
+                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {msg['engine']}</span>", unsafe_allow_html=True)
             
     # Quick suggestion buttons
     st.markdown("<small>💡 Quick Farmer Questions:</small>", unsafe_allow_html=True)
@@ -284,7 +317,7 @@ with tab_chat:
         w_summary = st.session_state.weather_summary
         
         with st.chat_message("assistant", avatar="🌾"):
-            with st.spinner("AgroSageGPT is reasoning over vision, soil telemetry, weather, and agronomic knowledge..."):
+            with st.spinner("AgroSageGPT is synthesizing Vision, Soil, Weather, and ChromaDB..."):
                 response_data = ask_agronomist(
                     query=final_query,
                     vision_summary=v_summary,
@@ -294,11 +327,14 @@ with tab_chat:
                     chat_history=st.session_state.chat_history
                 )
                 answer_text = response_data["answer"]
+                engine_used = response_data.get("engine", "AgroSage Engine")
+                
                 st.markdown(answer_text)
+                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_used}</span>", unsafe_allow_html=True)
                 
                 with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
                     for idx, doc in enumerate(response_data.get("retrieved_context", [])):
                         st.markdown(f"**Source Document Chunk {idx+1}:**")
                         st.text(doc)
                         
-        st.session_state.chat_history.append({"role": "assistant", "content": answer_text})
+        st.session_state.chat_history.append({"role": "assistant", "content": answer_text, "engine": engine_used})
