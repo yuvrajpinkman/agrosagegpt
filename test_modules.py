@@ -93,10 +93,38 @@ def test_rag_engine():
     print("  -> RAG Engine & ChromaDB passed successfully.")
 
 
+def test_tts_module():
+    print("[5/6] Testing Text-to-Speech (TTS) Module...")
+    from src.tts_engine import synthesize_speech, clean_text_for_speech
+    
+    cleaned = clean_text_for_speech("### Advice: **Apply 2g Mancozeb** 🌿")
+    assert "Advice: Apply 2g Mancozeb" in cleaned, "Clean speech failed"
+    
+    audio_bytes, engine_name = synthesize_speech("नमस्ते किसान भाई, आपकी फसल स्वस्थ है।", language="Hindi")
+    assert audio_bytes is not None and len(audio_bytes) > 1000, "TTS audio generation failed"
+    print(f"  -> TTS Module passed successfully (Engine: {engine_name}, Audio: {len(audio_bytes)} bytes).")
+
+
+def test_stt_module():
+    print("[6/6] Testing Speech-to-Text (STT) Module...")
+    from src.tts_engine import synthesize_speech
+    from src.stt_engine import transcribe_audio
+    
+    # Generate speech clip
+    audio_bytes, _ = synthesize_speech("टमाटर की फसल में कौन सा रोग है?", language="Hindi")
+    
+    # Transcribe audio using Groq Whisper-Large-v3
+    text, engine_name = transcribe_audio(audio_bytes, language="Hindi", filename="test.mp3")
+    assert text is not None and len(text) > 3, "STT transcription failed"
+    print(f"  -> STT Module passed successfully (Engine: {engine_name}, Transcribed: '{text}').")
+
+
 if __name__ == "__main__":
     print("=== Running AgroSageGPT System Verification ===")
     test_soil_module()
     test_weather_module()
     test_vision_module()
     test_rag_engine()
-    print("=== ALL 4 CORE MODULE TESTS PASSED! ===")
+    test_tts_module()
+    test_stt_module()
+    print("=== ALL 6 CORE MODULE TESTS PASSED! ===")

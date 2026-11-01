@@ -10,3 +10,4 @@ python-dotenv
 requests
 google-generativeai
 groq
+gTTS
