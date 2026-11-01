@@ -249,7 +249,7 @@ trigger_diagnose_now = False
 voice_text_query = None
 quick_chip_query = None
 
-with st.bottom():
+with st.bottom:
     # 1. Staged Leaf Image Banner (if user selected/uploaded an image)
     if st.session_state.staged_image is not None:
         with st.container():
