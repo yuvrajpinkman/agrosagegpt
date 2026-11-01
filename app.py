@@ -28,7 +28,7 @@ load_dotenv()
 # Streamlit Page Config - Light Mode Enforced
 st.set_page_config(
     page_title="AgroSageGPT | Digital Agronomist",
-    page_icon="🌱",
+    page_icon=":material/psychology:",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -155,10 +155,10 @@ if "staged_image_name" not in st.session_state:
 
 # Sidebar for Preferences & Settings
 with st.sidebar:
-    st.markdown("### 🌾 Farm Configuration")
+    st.markdown("### Farm Configuration")
     
     language_mode = st.selectbox(
-        "🌐 Language Mode:",
+        "Language Mode:",
         ["Auto-Detect (Adaptive)", "English", "Hindi", "Kannada", "Telugu", "Tamil"],
         index=0,
         help="In Auto-Detect mode, AgroSageGPT dynamically adapts its replies and voice to match the language you speak or type."
@@ -166,31 +166,31 @@ with st.sidebar:
     st.caption(f"Active Language: **{st.session_state.current_language}**")
     
     crop_type = st.selectbox(
-        "🌱 Primary Crop:",
+        "Primary Crop:",
         ["Rice / Paddy", "Wheat", "Tomato", "Maize / Corn", "Cotton", "Chili", "Potato"],
         index=0
     )
     
-    city_input = st.text_input("📍 Farm City:", value=os.getenv("DEFAULT_LOCATION", "Bengaluru"))
-    if st.button("🔄 Sync Weather Location", use_container_width=True):
+    city_input = st.text_input("Farm City:", value=os.getenv("DEFAULT_LOCATION", "Bengaluru"))
+    if st.button("Sync Weather Location", icon=":material/sync:", use_container_width=True):
         st.session_state.weather_data = get_weather_data(city_input)
         st.session_state.weather_summary = format_weather_summary(st.session_state.weather_data)
-        st.toast(f"Synced weather for {city_input}!", icon="🌤️")
+        st.toast(f"Synced weather for {city_input}", icon=":material/check:")
 
     st.markdown("---")
-    enable_tts = st.toggle("🔊 Read Answers Aloud (TTS)", value=True)
+    enable_tts = st.toggle("Read Answers Aloud (TTS)", value=True)
     
     st.markdown("---")
-    st.markdown("### 📚 Custom Knowledge Base")
+    st.markdown("### Custom Knowledge Base")
     st.caption("Documents dynamically ingested into ChromaDB:")
     if st.session_state.uploaded_doc_names:
         for doc_name in st.session_state.uploaded_doc_names:
-            st.markdown(f"• 📄 `{doc_name}`")
+            st.markdown(f"• `{doc_name}`")
     else:
         st.caption("*No custom files uploaded yet. Default agronomic KB active.*")
         
     st.markdown("---")
-    if st.button("🧹 Clear Chat History", use_container_width=True):
+    if st.button("Clear Chat History", icon=":material/delete:", use_container_width=True):
         st.session_state.chat_history = [
             {"role": "assistant", "content": "Chat cleared. What would you like to discuss about your crops today?", "engine": "AgroSage Reset", "audio_bytes": None, "attached_image": None}
         ]
@@ -201,8 +201,8 @@ with st.sidebar:
 st.markdown("""
 <div class="top-brand">
     <div>
-        <div class="brand-title">🌱 AgroSageGPT</div>
-        <div class="brand-subtitle">Multilingual Generative AI Digital Agronomist • Light Edition</div>
+        <div class="brand-title">AgroSageGPT</div>
+        <div class="brand-subtitle">Multilingual Generative AI Digital Agronomist • Professional Edition</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -211,7 +211,7 @@ st.markdown("""
 w = st.session_state.weather_data
 s = st.session_state.soil_dict
 
-with st.expander(f"📊 Live Field Telemetry ({w.get('city', 'Farm')}) • 🌡️ {w['temperature_c']}°C | 💧 Humidity {w['humidity_pct']}% | 🧪 NPK {s['nitrogen']['value']}-{s['phosphorus']['value']}-{s['potassium']['value']} | ⚖️ pH {s['ph']['value']}", expanded=False):
+with st.expander(f"Field Telemetry ({w.get('city', 'Farm')}) — {w['temperature_c']}°C | Humidity {w['humidity_pct']}% | NPK {s['nitrogen']['value']}-{s['phosphorus']['value']}-{s['potassium']['value']} | pH {s['ph']['value']}", icon=":material/sensors:", expanded=False):
     t_c1, t_c2, t_c3, t_c4, t_c5 = st.columns(5)
     t_c1.metric("Temperature", f"{w['temperature_c']} °C", f"Feels {w['feels_like_c']} °C")
     t_c2.metric("Humidity", f"{w['humidity_pct']} %", w['condition'])
@@ -220,7 +220,7 @@ with st.expander(f"📊 Live Field Telemetry ({w.get('city', 'Farm')}) • 🌡�
     t_c5.metric("Soil Moisture", f"{s['moisture']['value']} %", s['moisture']['status'])
     
     st.caption(f"Weather Source: {w.get('source')} | Soil: 7-in-1 IoT Telemetry")
-    if st.button("📡 Simulate New Soil Telemetry Event", type="secondary"):
+    if st.button("Simulate New Soil Telemetry Event", icon=":material/refresh:", type="secondary"):
         st.session_state.soil_df = generate_soil_history(hours=24)
         st.session_state.soil_dict = get_latest_soil_reading(st.session_state.soil_df, as_dict=True)
         st.session_state.soil_summary = get_latest_soil_reading(st.session_state.soil_df, as_dict=False)
@@ -231,7 +231,7 @@ chat_container = st.container()
 
 with chat_container:
     for idx, msg in enumerate(st.session_state.chat_history):
-        avatar = "🌾" if msg["role"] == "assistant" else "👨‍🌾"
+        avatar = ":material/smart_toy:" if msg["role"] == "assistant" else ":material/person:"
         with st.chat_message(msg["role"], avatar=avatar):
             if msg.get("attached_image") is not None:
                 st.image(msg["attached_image"], caption="Attached Crop Foliage", width=300)
@@ -242,7 +242,7 @@ with chat_container:
                 st.audio(msg["audio_bytes"], format="audio/mp3")
                 
             if msg.get("engine"):
-                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {msg['engine']}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span class='engine-tag'>Engine: {msg['engine']}</span>", unsafe_allow_html=True)
 
 # ----------------- FLOATING BOTTOM ACTION PILL & INPUT DOCK -----------------
 trigger_diagnose_now = False
@@ -255,8 +255,8 @@ with st.bottom:
         with st.container():
             st_col1, st_col2, st_col3 = st.columns([1, 4, 2])
             st_col1.image(st.session_state.staged_image, width=50)
-            st_col2.caption(f"🍃 **{st.session_state.staged_image_name or 'Leaf Photo Attached'}** (Ready to analyze with your question)")
-            if st_col3.button("❌ Remove", key="clear_staged_leaf", use_container_width=True):
+            st_col2.caption(f"**{st.session_state.staged_image_name or 'Leaf Photo Attached'}** (Ready to analyze with your question)")
+            if st_col3.button("Remove", icon=":material/close:", key="clear_staged_leaf", use_container_width=True):
                 st.session_state.staged_image = None
                 st.session_state.staged_image_name = None
                 st.rerun()
@@ -266,23 +266,23 @@ with st.bottom:
 
     # Tool 1: Leaf Photo Popover
     with tool_col1:
-        with st.popover("📷 Leaf Photo", use_container_width=True, help="Upload foliage photo for dual-tier disease diagnosis"):
-            st.markdown("##### 🍃 Upload Foliage Photo")
+        with st.popover("Leaf Photo", icon=":material/photo_camera:", use_container_width=True, help="Upload foliage photo for dual-tier disease diagnosis"):
+            st.markdown("##### Upload Foliage Photo")
             st.caption("Local Meta DINOv2 ViT + Gemini Multimodal Validator")
             up_img = st.file_uploader("Choose leaf image", type=["jpg", "jpeg", "png"], key="dock_leaf_up")
             if up_img is not None:
                 st.session_state.staged_image = Image.open(up_img)
                 st.session_state.staged_image_name = up_img.name
-                st.success(f"Attached `{up_img.name}`!")
+                st.success(f"Attached `{up_img.name}`")
 
-            st.write("Or quick field samples:")
+            st.write("Or choose standard samples:")
             s_c1, s_c2 = st.columns(2)
-            if s_c1.button("🍃 Diseased Leaf", use_container_width=True):
+            if s_c1.button("Diseased Leaf Sample", icon=":material/science:", use_container_width=True):
                 if os.path.exists("sample_data/sample_diseased_leaf.jpg"):
                     st.session_state.staged_image = Image.open("sample_data/sample_diseased_leaf.jpg")
                     st.session_state.staged_image_name = "sample_diseased_leaf.jpg"
                     st.rerun()
-            if s_c2.button("🌿 Healthy Leaf", use_container_width=True):
+            if s_c2.button("Healthy Leaf Sample", icon=":material/check_circle:", use_container_width=True):
                 if os.path.exists("sample_data/sample_healthy_leaf.jpg"):
                     st.session_state.staged_image = Image.open("sample_data/sample_healthy_leaf.jpg")
                     st.session_state.staged_image_name = "sample_healthy_leaf.jpg"
@@ -290,17 +290,17 @@ with st.bottom:
 
             if st.session_state.staged_image is not None:
                 st.image(st.session_state.staged_image, width=160, caption="Staged Foliage")
-                if st.button("🔍 Diagnose Plant Health Now", type="primary", use_container_width=True):
+                if st.button("Diagnose Foliage Now", icon=":material/biotech:", type="primary", use_container_width=True):
                     trigger_diagnose_now = True
 
     # Tool 2: Voice Microphone Popover
     with tool_col2:
-        with st.popover("🎙️ Voice Mic", use_container_width=True, help="Speak your question in English, Hindi, Kannada, Telugu, Tamil"):
+        with st.popover("Voice Mic", icon=":material/mic:", use_container_width=True, help="Speak your question in English, Hindi, Kannada, Telugu, Tamil"):
             v_h1, v_h2 = st.columns([3, 1])
             with v_h1:
-                st.markdown(f"##### 🎙️ Voice Query ({st.session_state.current_language})")
+                st.markdown(f"##### Voice Query ({st.session_state.current_language})")
             with v_h2:
-                if st.button("🔄", help="Clear & record again"):
+                if st.button("Reset", icon=":material/refresh:", help="Clear & record again"):
                     st.session_state.mic_key_idx += 1
                     st.rerun()
             st.caption("Noise-gated field audio with Gemini Flash & Whisper ASR")
@@ -315,14 +315,14 @@ with st.bottom:
                         voice_text_query = t_text
                         if language_mode == "Auto-Detect (Adaptive)":
                             st.session_state.current_language = detect_language(voice_text_query, fallback=st.session_state.current_language)
-                        st.info(f"🗣️ **Voice Recognized ({st.session_state.current_language}):** *\"{voice_text_query}\"*")
-                        if st.button("🚀 Ask Recognized Question", type="primary", use_container_width=True):
+                        st.info(f"**Recognized ({st.session_state.current_language}):** *\"{voice_text_query}\"*")
+                        if st.button("Ask Recognized Question", icon=":material/send:", type="primary", use_container_width=True):
                             pass
 
     # Tool 3: Dynamic PDF / Manual Ingestion Popover
     with tool_col3:
-        with st.popover("📄 Add Guide", use_container_width=True, help="Upload agricultural bulletins or seed manuals into ChromaDB"):
-            st.markdown("##### 📄 Ingest Agricultural Guides")
+        with st.popover("Add Guide", icon=":material/upload_file:", use_container_width=True, help="Upload agricultural bulletins or seed manuals into ChromaDB"):
+            st.markdown("##### Ingest Agricultural Guides")
             st.caption("Uploaded documents are indexed into ChromaDB vector memory in real-time.")
             up_doc = st.file_uploader("Upload .pdf, .txt, .md", type=["pdf", "txt", "md"], key="float_doc_up")
             if up_doc is not None and up_doc.name not in st.session_state.uploaded_doc_names:
@@ -331,21 +331,21 @@ with st.bottom:
                     kb = get_knowledge_store()
                     num_chunks = kb.ingest_user_document(doc_bytes, up_doc.name)
                     st.session_state.uploaded_doc_names.append(up_doc.name)
-                    st.toast(f"✅ Indexed {num_chunks} chunks from `{up_doc.name}`!", icon="📚")
+                    st.toast(f"Indexed {num_chunks} chunks from `{up_doc.name}`", icon=":material/check:")
             if st.session_state.uploaded_doc_names:
                 st.caption("Currently active manuals:")
                 for d in st.session_state.uploaded_doc_names:
-                    st.caption(f"• 📄 `{d}`")
+                    st.caption(f"• `{d}`")
 
     # Tool 4: Quick Suggestion Prompts Popover
     with tool_col4:
-        with st.popover("💡 Prompts", use_container_width=True, help="Fast agricultural starter questions"):
-            st.markdown("##### 💡 Instant Agricultural Queries")
-            if st.button("🌾 When & how to cultivate Rice / Paddy?", use_container_width=True):
+        with st.popover("Prompts", icon=":material/lightbulb:", use_container_width=True, help="Fast agricultural starter questions"):
+            st.markdown("##### Suggested Queries")
+            if st.button("When & how to cultivate Rice / Paddy?", icon=":material/help_outline:", use_container_width=True):
                 quick_chip_query = "When and how to cultivate Rice (Paddy)? Please provide a complete guide from nursery preparation to harvest."
-            if st.button("🌱 Does my soil need fertilizer?", use_container_width=True):
+            if st.button("Does my soil need fertilizer?", icon=":material/help_outline:", use_container_width=True):
                 quick_chip_query = "Based on my live soil NPK, pH, and moisture levels, what fertilizers should I apply?"
-            if st.button("🌦️ Is the weather safe for pesticide spray?", use_container_width=True):
+            if st.button("Is today safe for pesticide spray?", icon=":material/help_outline:", use_container_width=True):
                 quick_chip_query = "Considering current temperature, humidity, and wind conditions, is it safe to spray pesticides today?"
 
     # 3. Main Chat Input Box (floating alongside tool icons)
@@ -366,12 +366,12 @@ if trigger_diagnose_now and st.session_state.staged_image is not None:
         
         val_telemetry = ""
         if "hf_prediction" in diag:
-            val_telemetry += f"- **🤖 Local Model (HF DINOv2):** `{diag['hf_prediction']}`\n"
+            val_telemetry += f"- **Local Model (HF DINOv2):** `{diag['hf_prediction']}`\n"
         if "validator_verdict" in diag and diag["validator_verdict"]:
-            val_telemetry += f"- **🛡️ Gemini Multimodal Validator:** `{diag['validator_verdict']}` — *{diag.get('validation_notes', '')}*\n"
+            val_telemetry += f"- **Gemini Multimodal Validator:** `{diag['validator_verdict']}` — *{diag.get('validation_notes', '')}*\n"
         
         diag_msg = (
-            f"### 🩺 Plant Pathology Assessment: **{diag['condition']}**\n\n"
+            f"### Plant Pathology Assessment: **{diag['condition']}**\n\n"
             f"{val_telemetry}"
             f"- **Severity:** `{diag['severity']}` (Confidence: {diag['confidence']*100:.1f}%)\n"
             f"- **Observed Symptoms:** {diag['symptoms']}\n"
@@ -446,7 +446,7 @@ if final_query:
         s_summary = st.session_state.soil_summary
         w_summary = st.session_state.weather_summary
         
-        with st.chat_message("assistant", avatar="🌾"):
+        with st.chat_message("assistant", avatar=":material/smart_toy:"):
             with st.spinner(f"AgroSageGPT is synthesizing your agronomic guidance ({active_language})..."):
                 response_data = ask_agronomist(
                     query=final_query,
@@ -458,7 +458,7 @@ if final_query:
                 )
                 answer_text = response_data["answer"]
                 engine_used = response_data.get("engine", "AgroSage Engine")
-                engine_display = f"{engine_used} • 🌐 {lang_label}"
+                engine_display = f"{engine_used} • Language: {lang_label}"
                 
                 st.markdown(answer_text)
                 
@@ -469,11 +469,11 @@ if final_query:
                         audio_bytes, tts_engine_name = synthesize_speech(answer_text, language=active_language)
                         if audio_bytes:
                             st.audio(audio_bytes, format="audio/mp3")
-                            st.caption(f"🔊 Spoken by: {tts_engine_name} ({active_language})")
+                            st.caption(f"Audio playback: {tts_engine_name} ({active_language})")
                             
-                st.markdown(f"<span class='engine-tag'>⚡ Powered by: {engine_display}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span class='engine-tag'>Engine: {engine_display}</span>", unsafe_allow_html=True)
                 
-                with st.expander("📚 Retrieved Agronomic Knowledge Chunks", expanded=False):
+                with st.expander("Retrieved Agronomic Knowledge Chunks", icon=":material/menu_book:", expanded=False):
                     for idx, doc in enumerate(response_data.get("retrieved_context", [])):
                         st.markdown(f"**Chunk {idx+1}:**")
                         st.text(doc)

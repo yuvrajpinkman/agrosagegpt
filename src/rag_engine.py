@@ -238,7 +238,7 @@ def _generate_dynamic_offline_response(query: str, language: str = "Hindi") -> s
     # Check for Rice / Paddy
     if any(k in q_lower for k in ["chawal", "चावल", "dhan", "धान", "rice", "paddy"]):
         if language.lower() == "hindi":
-            return """### 🌾 धान (चावल) की उन्नत खेती: समय एवं संपूर्ण विधि
+            return """### धान (चावल) की उन्नत खेती: समय एवं संपूर्ण विधि
 
 **नमस्ते किसान भाई! धान की सफल खेती के लिए मुख्य बिंदु नीचे दिए गए हैं:**
 
@@ -263,7 +263,7 @@ def _generate_dynamic_offline_response(query: str, language: str = "Hindi") -> s
 - खरपतवार नियंत्रण के लिए रोपाई के 2-3 दिन के अंदर प्रेटिलाक्लोर (Pretilachlor) 500 मिली प्रति एकड़ की दर से छिड़काव करें।
 """
     # Default Agricultural guidance
-    return f"""### 🌾 एग्रोसेजजीपीटी (AgroSageGPT) - कृषि सलाह
+    return f"""### एग्रोसेजजीपीटी (AgroSageGPT) - कृषि सलाह
 **नमस्ते किसान भाई! आपके सवाल: "{query}" के संदर्भ में:**
 
 1. **बुवाई एवं मृदा तैयारी:** खेत की 2-3 बार गहरी जुताई करके पाटा लगाएं और मिट्टी को भुरभुरा बनाएं। खेत में जैविक खाद (गोबर की सड़ी खाद) 4-5 टन प्रति एकड़ अवश्य मिलाएं।
